@@ -1,3 +1,5 @@
+USER@DESKTOP-O4TOLFL MINGW64 /d/razorpay-ai-recovery (main)
+$ cat README.md
 # AI Payment Recovery Agent
 
 An AI-driven payment recovery decision engine that detects payment degradation, identifies the affected payment route, quantifies business impact, evaluates alternative banks, and simulates a recovery strategy.
@@ -87,9 +89,9 @@ Example incident characteristics:
 - Excess failures: approximately **126.6**
 - Estimated revenue at risk: approximately **₹355,840**
 - Recommended alternative bank: **Bank_A**
-- Historical alternative success rate: approximately **96%**
-- Simulated additional successful payments: approximately **135**
-- Simulated recoverable value: approximately **₹291K**
+- Historical alternative success rate: approximately **95.81%**
+- Simulated additional successful payments: approximately **134**
+- Estimated recoverable value: approximately **₹285.6K**
 
 These values are produced from the included synthetic dataset and may change if the dataset is regenerated.
 
@@ -245,6 +247,8 @@ razorpay-ai-recovery/
 - **Pandas** — transaction data processing and aggregation
 - **NumPy** — numerical calculations and synthetic data generation
 - **Streamlit** — interactive product interface
+- **Google Gemini** — advisory incident diagnosis
+- **Pydantic** — structured validation of AI diagnosis output
 
 The current implementation is intentionally lightweight and can run locally without a live payment gateway.
 
@@ -277,7 +281,7 @@ Activate it:
 ### Install dependencies
 
 ```bash
-pip install pandas numpy streamlit
+python -m pip install -r requirements.txt
 ```
 
 ---
@@ -622,3 +626,6 @@ No real payment routing or payment processing is performed.
 Add the appropriate license before public distribution.
 
 If this project is being submitted to a hackathon or used only as a prototype, follow the event's repository and licensing requirements.
+
+USER@DESKTOP-O4TOLFL MINGW64 /d/razorpay-ai-recovery (main)
+$ 
