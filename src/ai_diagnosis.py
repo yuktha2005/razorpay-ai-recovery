@@ -1,17 +1,64 @@
+import os
+import json
 import pandas as pd
 
+from dotenv import load_dotenv
+from pydantic import BaseModel, Field, ValidationError
+from google import genai
+
 
 # =========================================
-# AI DIAGNOSIS ENGINE
+# ENVIRONMENT
 # =========================================
 
-def build_diagnosis_context(df, incident):
+load_dotenv()
+
+GEMINI_API_KEY = os.getenv(
+    "GEMINI_API_KEY"
+)
+
+
+# =========================================
+# AI RESPONSE SCHEMA
+# =========================================
+
+class AIDiagnosis(BaseModel):
+
+    primary_diagnosis: str
+
+    severity: str = Field(
+        description="Must be LOW, MEDIUM, HIGH, or CRITICAL"
+    )
+
+    confidence: float = Field(
+        ge=0,
+        le=100
+    )
+
+    evidence: list[str]
+
+    dominant_failure_pattern: str
+
+    affected_route_dimensions: list[str]
+
+    recommended_investigation: list[str]
+
+    route_specific_problem: bool
+
+
+# =========================================
+# BUILD DIAGNOSIS CONTEXT
+# =========================================
+
+def build_diagnosis_context(
+    df,
+    incident
+):
     """
-    Prepare structured evidence for an AI model.
+    Build structured evidence for the AI diagnosis.
 
-    The function does not make the recovery decision.
-    It only collects evidence that can be passed to
-    a local LLM.
+    The AI receives evidence generated from the
+    transaction dataset rather than the entire dataset.
     """
 
     if incident is None:
@@ -36,31 +83,33 @@ def build_diagnosis_context(df, incident):
         incident["device_type"]
     )
 
-    # -------------------------------------
-    # Incident transactions
-    # -------------------------------------
+    # -----------------------------------------
+    # INCIDENT ROUTE DATA
+    # -----------------------------------------
 
     incident_data = df[
         (df["timestamp"] >= incident_start)
         &
         (df["timestamp"] < incident_end)
         &
-        (df["payment_method"]
-         == payment_method)
+        (df["payment_method"] == payment_method)
         &
         (df["bank"] == bank)
         &
-        (df["device_type"]
-         == device_type)
+        (df["device_type"] == device_type)
     ].copy()
 
-    # -------------------------------------
-    # Failure analysis
-    # -------------------------------------
+    # -----------------------------------------
+    # FAILURE DATA
+    # -----------------------------------------
 
     failures = incident_data[
         incident_data["status"] == "FAILED"
     ].copy()
+
+    # -----------------------------------------
+    # FAILURE REASONS
+    # -----------------------------------------
 
     if "error_code" in failures.columns:
 
@@ -79,10 +128,6 @@ def build_diagnosis_context(df, incident):
             dtype="int64"
         )
 
-    # -------------------------------------
-    # Failure percentages
-    # -------------------------------------
-
     total_failures = len(
         failures
     )
@@ -95,29 +140,32 @@ def build_diagnosis_context(df, incident):
             failure_reasons.items()
         ):
 
-            failure_reason_data.append({
-                "error_code":
-                    error_code,
+            failure_reason_data.append(
+                {
+                    "error_code":
+                        str(error_code),
 
-                "failures":
-                    int(count),
+                    "failures":
+                        int(count),
 
-                "percentage":
-                    round(
-                        count
-                        / total_failures
-                        * 100,
-                        2
-                    )
-            })
+                    "percentage":
+                        round(
+                            count
+                            / total_failures
+                            * 100,
+                            2
+                        )
+                }
+            )
 
-    # -------------------------------------
-    # Context
-    # -------------------------------------
+    # -----------------------------------------
+    # FINAL CONTEXT
+    # -----------------------------------------
 
     context = {
 
         "route": {
+
             "payment_method":
                 payment_method,
 
@@ -168,13 +216,15 @@ def build_diagnosis_context(df, incident):
                 int(total_failures),
 
             "failure_rate":
-                round(
-                    total_failures
-                    / len(incident_data),
-                    4
-                )
-                if len(incident_data) > 0
-                else 0.0,
+                (
+                    round(
+                        total_failures
+                        / len(incident_data),
+                        4
+                    )
+                    if len(incident_data) > 0
+                    else 0.0
+                ),
 
             "reasons":
                 failure_reason_data
@@ -185,105 +235,263 @@ def build_diagnosis_context(df, incident):
 
 
 # =========================================
-# LOCAL AI PROMPT
+# CREATE AI PROMPT
 # =========================================
 
 def create_diagnosis_prompt(
-    diagnosis_context
+    context
 ):
     """
-    Create a structured prompt for a local LLM.
+    Create an evidence-grounded prompt.
 
-    The model is instructed to diagnose the
-    incident using only supplied evidence.
+    Gemini is responsible only for diagnosis.
+    It cannot authorize or execute recovery.
     """
 
-    if diagnosis_context is None:
-        return None
+    route = context["route"]
 
-    route = diagnosis_context[
-        "route"
-    ]
+    incident = context["incident"]
 
-    incident = diagnosis_context[
-        "incident"
-    ]
+    failures = context["failures"]
 
-    failures = diagnosis_context[
-        "failures"
-    ]
+    failure_reasons = json.dumps(
+        failures["reasons"],
+        indent=2
+    )
 
     prompt = f"""
-You are a payment reliability diagnosis agent.
+You are an AI payment reliability diagnosis agent.
 
-Analyze the following payment incident.
+Your task is to diagnose a payment reliability
+incident using ONLY the evidence supplied below.
 
-IMPORTANT:
-- Use only the supplied evidence.
-- Do not invent transaction facts.
-- Do not recommend executing payment routing.
-- Do not bypass policy controls.
-- Your task is diagnosis and explanation only.
+You are a diagnosis and reasoning component.
+
+You are NOT authorized to:
+
+- execute payment routing
+- move money
+- modify transactions
+- approve recovery
+- bypass policy controls
+- directly select or authorize a recovery bank
+
+A separate deterministic policy engine makes
+the final recovery decision.
 
 PAYMENT ROUTE
-Payment method: {route['payment_method']}
-Bank: {route['bank']}
-Device: {route['device_type']}
+
+Payment method:
+{route['payment_method']}
+
+Bank:
+{route['bank']}
+
+Device:
+{route['device_type']}
+
 
 INCIDENT
-Time window: {incident['time_window']}
-Transactions: {incident['transactions']}
-Current success rate: {incident['success_rate'] * 100:.2f}%
-Historical baseline: {incident['baseline_success_rate'] * 100:.2f}%
-Degradation: {incident['degradation_percentage_points']:.2f} percentage points
 
-FAILURES
-Total failures: {failures['total']}
-Failure rate: {failures['failure_rate'] * 100:.2f}%
+Time window:
+{incident['time_window']}
+
+Transactions:
+{incident['transactions']}
+
+Current success rate:
+{incident['success_rate'] * 100:.2f}%
+
+Historical baseline:
+{incident['baseline_success_rate'] * 100:.2f}%
+
+Degradation:
+{incident['degradation_percentage_points']:.2f} percentage points
+
+
+FAILURE INFORMATION
+
+Total failures:
+{failures['total']}
+
+Failure rate:
+{failures['failure_rate'] * 100:.2f}%
 
 Failure reasons:
-{failures['reasons']}
 
-Return a structured diagnosis containing:
+{failure_reasons}
+
+
+TASK
+
+Produce a structured diagnosis containing:
 
 1. Primary diagnosis
-2. Severity: LOW, MEDIUM, HIGH, or CRITICAL
+2. Severity
 3. Confidence from 0 to 100
 4. Evidence supporting the diagnosis
 5. Dominant failure pattern
 6. Affected route dimensions
 7. Recommended investigation
-8. Whether the evidence suggests a route-specific problem
+8. Whether the evidence indicates a route-specific problem
 
-Do not make a recovery decision.
+Severity MUST be exactly one of:
+
+LOW
+MEDIUM
+HIGH
+CRITICAL
+
+IMPORTANT:
+
+Use only supplied evidence.
+
+Do not invent transaction facts.
+
+Do not invent failure reasons.
+
+Do not recommend a specific recovery bank.
+
+Do not authorize recovery.
+
+Do not execute an action.
+
+Do not bypass the policy engine.
 """
 
     return prompt.strip()
 
 
 # =========================================
-# DETERMINISTIC FALLBACK
+# GEMINI CLIENT
+# =========================================
+
+def get_gemini_client():
+
+    if not GEMINI_API_KEY:
+
+        return None
+
+    return genai.Client(
+        api_key=GEMINI_API_KEY
+    )
+
+
+# =========================================
+# REAL GEMINI DIAGNOSIS
+# =========================================
+
+def run_gemini_diagnosis(
+    context
+):
+    """
+    Call Gemini through the Interactions API.
+
+    Gemini produces diagnosis only.
+    """
+
+    client = get_gemini_client()
+
+    if client is None:
+
+        raise RuntimeError(
+            "GEMINI_API_KEY is not configured."
+        )
+
+    prompt = create_diagnosis_prompt(
+        context
+    )
+
+    interaction = client.interactions.create(
+        model="gemini-3.6-flash",
+
+        input=prompt,
+
+        response_format={
+            "type": "text",
+            "mime_type": "application/json",
+            "schema":
+                AIDiagnosis.model_json_schema()
+        },
+
+        store=False
+    )
+
+    # -----------------------------------------
+    # READ RESPONSE
+    # -----------------------------------------
+
+    output_text = getattr(
+        interaction,
+        "output_text",
+        None
+    )
+
+    if not output_text:
+
+        raise RuntimeError(
+            "Gemini returned an empty response."
+        )
+
+    # -----------------------------------------
+    # VALIDATE JSON
+    # -----------------------------------------
+
+    try:
+
+        diagnosis = (
+            AIDiagnosis.model_validate_json(
+                output_text
+            )
+        )
+
+    except ValidationError as error:
+
+        raise RuntimeError(
+            f"Invalid Gemini diagnosis: {error}"
+        )
+
+    # -----------------------------------------
+    # VALIDATE ENUM-LIKE SEVERITY
+    # -----------------------------------------
+
+    valid_severities = {
+        "LOW",
+        "MEDIUM",
+        "HIGH",
+        "CRITICAL"
+    }
+
+    if diagnosis.severity not in valid_severities:
+
+        raise RuntimeError(
+            "Gemini returned an invalid severity."
+        )
+
+    return diagnosis
+
+
+# =========================================
+# SAFE FALLBACK
 # =========================================
 
 def fallback_diagnosis(
-    diagnosis_context
+    context
 ):
     """
-    Safe fallback when no local LLM is available.
-
-    This is deliberately evidence-based and
-    does not execute any recovery action.
+    Evidence-based fallback used when Gemini
+    is unavailable or returns invalid output.
     """
 
-    incident = diagnosis_context[
+    incident = context[
         "incident"
     ]
 
-    route = diagnosis_context[
+    route = context[
         "route"
     ]
 
-    failures = diagnosis_context[
+    failures = context[
         "failures"
     ]
 
@@ -294,16 +502,18 @@ def fallback_diagnosis(
     )
 
     failure_rate = (
-        failures["failure_rate"]
+        failures[
+            "failure_rate"
+        ]
     )
 
     reasons = failures[
         "reasons"
     ]
 
-    # -------------------------------------
-    # Severity
-    # -------------------------------------
+    # -----------------------------------------
+    # SEVERITY
+    # -----------------------------------------
 
     if degradation >= 25:
 
@@ -321,9 +531,9 @@ def fallback_diagnosis(
 
         severity = "LOW"
 
-    # -------------------------------------
-    # Confidence
-    # -------------------------------------
+    # -----------------------------------------
+    # CONFIDENCE
+    # -----------------------------------------
 
     if degradation >= 20:
 
@@ -341,9 +551,9 @@ def fallback_diagnosis(
 
         confidence = 80
 
-    # -------------------------------------
-    # Dominant failure reason
-    # -------------------------------------
+    # -----------------------------------------
+    # DOMINANT FAILURE
+    # -----------------------------------------
 
     if reasons:
 
@@ -357,22 +567,13 @@ def fallback_diagnosis(
 
     else:
 
-        dominant_reason = (
-            "UNKNOWN"
-        )
+        dominant_reason = "UNKNOWN"
 
         dominant_percentage = 0.0
 
-    # -------------------------------------
-    # Diagnosis
-    # -------------------------------------
-
-    primary_diagnosis = (
-        f"Route-specific degradation detected "
-        f"on {route['payment_method']} → "
-        f"{route['bank']} → "
-        f"{route['device_type']}."
-    )
+    # -----------------------------------------
+    # EVIDENCE
+    # -----------------------------------------
 
     evidence = [
 
@@ -402,44 +603,46 @@ def fallback_diagnosis(
             f"of observed failures."
         )
 
-    return {
+    return AIDiagnosis(
 
-        "primary_diagnosis":
-            primary_diagnosis,
+        primary_diagnosis=(
+            f"Route-specific degradation detected "
+            f"on {route['payment_method']} → "
+            f"{route['bank']} → "
+            f"{route['device_type']}."
+        ),
 
-        "severity":
-            severity,
+        severity=severity,
 
-        "confidence":
-            confidence,
+        confidence=confidence,
 
-        "evidence":
-            evidence,
+        evidence=evidence,
 
-        "dominant_failure_pattern":
+        dominant_failure_pattern=
             dominant_reason,
 
-        "affected_route_dimensions":
-            [
-                route["payment_method"],
-                route["bank"],
-                route["device_type"]
-            ],
+        affected_route_dimensions=[
 
-        "recommended_investigation":
-            [
-                "Inspect affected bank performance.",
-                "Compare comparable alternative routes.",
-                "Review dominant failure reasons.",
-                "Validate recovery through policy controls."
-            ],
+            route["payment_method"],
 
-        "route_specific_problem":
-            True,
+            route["bank"],
 
-        "source":
-            "evidence_based_fallback"
-    }
+            route["device_type"]
+        ],
+
+        recommended_investigation=[
+
+            "Inspect affected bank performance.",
+
+            "Compare comparable alternative routes.",
+
+            "Review dominant failure reasons.",
+
+            "Validate recovery through policy controls."
+        ],
+
+        route_specific_problem=True
+    )
 
 
 # =========================================
@@ -451,11 +654,10 @@ def diagnose_incident(
     incident
 ):
     """
-    Generate an AI diagnosis context and
-    evidence-grounded fallback diagnosis.
+    Generate a diagnosis using Gemini.
 
-    The interface is intentionally designed
-    so a local LLM can be inserted later.
+    If Gemini is unavailable, safely fall back
+    to deterministic evidence-based diagnosis.
     """
 
     context = build_diagnosis_context(
@@ -464,21 +666,54 @@ def diagnose_incident(
     )
 
     if context is None:
+
         return None
 
-    prompt = create_diagnosis_prompt(
-        context
-    )
+    # -----------------------------------------
+    # TRY REAL AI
+    # -----------------------------------------
 
-    diagnosis = fallback_diagnosis(
-        context
-    )
+    try:
 
-    diagnosis[
-        "prompt"
-    ] = prompt
+        diagnosis = run_gemini_diagnosis(
+            context
+        )
 
-    return diagnosis
+        result = diagnosis.model_dump()
+
+        result["source"] = "gemini"
+
+        return result
+
+    # -----------------------------------------
+    # SAFE FALLBACK
+    # -----------------------------------------
+
+    except Exception as error:
+
+        print(
+            "\n⚠️ Gemini diagnosis unavailable."
+        )
+
+        print(
+            f"Reason: {error}"
+        )
+
+        print(
+            "Using evidence-based fallback."
+        )
+
+        diagnosis = fallback_diagnosis(
+            context
+        )
+
+        result = diagnosis.model_dump()
+
+        result["source"] = (
+            "evidence_based_fallback"
+        )
+
+        return result
 
 
 # =========================================
@@ -498,9 +733,29 @@ def print_diagnosis(
         return
 
     print("\n")
-    print("=" * 60)
-    print("                 AI DIAGNOSIS")
-    print("=" * 60)
+
+    print(
+        "=" * 60
+    )
+
+    print(
+        "                 AI DIAGNOSIS"
+    )
+
+    print(
+        "=" * 60
+    )
+
+    print(
+        "\nAI source:"
+    )
+
+    print(
+        diagnosis.get(
+            "source",
+            "unknown"
+        )
+    )
 
     print(
         "\nPrimary diagnosis:"
@@ -527,7 +782,7 @@ def print_diagnosis(
     )
 
     print(
-        f"{diagnosis['confidence']}%"
+        f"{diagnosis['confidence']:.0f}%"
     )
 
     print(
@@ -575,7 +830,10 @@ def print_diagnosis(
     )
 
     print("\n")
-    print("=" * 60)
+
+    print(
+        "=" * 60
+    )
 
 
 # =========================================
@@ -612,7 +870,7 @@ def run_test():
         return
 
     print(
-        "Generating AI diagnosis..."
+        "Running Gemini AI diagnosis..."
     )
 
     diagnosis = diagnose_incident(
