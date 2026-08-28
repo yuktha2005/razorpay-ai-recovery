@@ -41,7 +41,8 @@ from policy_engine import (
 )
 
 from batch_recovery import (
-    execute_batch_recovery
+    execute_batch_recovery,
+    run_batch_recovery
 )
 
 from audit_logger import (
@@ -1618,188 +1619,194 @@ recovery action is permitted.
 
     st.markdown(
         '<div class="section-title">'
-        '🔬 Recovery Simulation'
+        '🔬 Batch Recovery Simulation'
         '</div>',
         unsafe_allow_html=True
     )
 
-
     st.caption(
-        "Counterfactual simulation — no real payment "
-        "routing is performed."
+        "Counterfactual batch simulation — no real payment "
+        "routing or payment processing is performed."
     )
-
 
     if recovery:
 
         if decision == "RECOVER":
 
             simulate = st.button(
-                "🚀 Simulate Approved Recovery",
+                "🚀 Simulate Approved Batch Recovery",
                 type="primary",
                 use_container_width=True
             )
 
-
             if simulate:
 
-                simulation = simulate_recovery(
-                    transactions,
-                    incident,
-                    recovery
-                )
+                with st.spinner(
+                    "Simulating recovery across the affected batch..."
+                ):
+
+                    try:
+
+                        batch_result = run_batch_recovery(
+                            transactions,
+                            incident,
+                            recovery,
+                            batch_size=1000
+                        )
+
+                    except Exception as e:
+
+                        batch_result = None
+
+                        st.error(
+                            f"Batch recovery simulation failed: {e}"
+                        )
 
 
-                if simulation:
+                if batch_result:
 
                     st.success(
-                        "Approved recovery strategy simulated successfully."
+                        "Approved recovery strategy simulated across the affected batch."
                     )
 
-
-                    before_col, after_col = (
-                        st.columns(2)
-                    )
-
-
-                    with before_col:
-
-                        st.markdown(
-                            "### 🔴 Before"
-                        )
-
-                        st.metric(
-                            "Route",
-                            simulation[
-                                "current_bank"
-                            ]
-                        )
-
-                        st.metric(
-                            "Success Rate",
-                            f"{simulation['before_success_rate'] * 100:.2f}%"
-                        )
-
-                        st.metric(
-                            "Successful Payments",
-                            f"{simulation['before_successes']:,}"
-                        )
-
-                        st.metric(
-                            "Failed Payments",
-                            f"{simulation['before_failures']:,}"
-                        )
-
-
-                    with after_col:
-
-                        st.markdown(
-                            "### 🟢 Simulated After"
-                        )
-
-                        st.metric(
-                            "Route",
-                            simulation[
-                                "alternative_bank"
-                            ]
-                        )
-
-                        st.metric(
-                            "Success Rate",
-                            f"{simulation['after_success_rate'] * 100:.2f}%",
-                            delta=(
-                                f"+"
-                                f"{simulation['success_rate_improvement'] * 100:.2f}"
-                                f" pp"
-                            )
-                        )
-
-                        st.metric(
-                            "Successful Payments",
-                            f"{simulation['after_successes']:,}",
-                            delta=(
-                                f"+"
-                                f"{simulation['additional_successes']}"
-                            )
-                        )
-
-                        st.metric(
-                            "Failed Payments",
-                            f"{simulation['after_failures']:,}"
-                        )
-
+                    # ---------------------------------
+                    # BATCH OUTCOME
+                    # ---------------------------------
 
                     st.markdown(
                         '<div class="simulation-result">',
                         unsafe_allow_html=True
                     )
 
+                    st.markdown(
+                        "### 📊 Recovery Outcome"
+                    )
 
-                    c1, c2 = st.columns(2)
-
+                    c1, c2, c3, c4 = st.columns(4)
 
                     with c1:
 
                         st.metric(
-                            "Additional Successful Payments",
-                            f"+{simulation['additional_successes']}"
+                            "Eligible Transactions",
+                            f"{batch_result['eligible_transactions']:,}"
                         )
-
 
                     with c2:
 
                         st.metric(
-                            "Estimated Recoverable Value",
-                            f"₹{simulation['estimated_recovered_value']:,.2f}"
+                            "Simulated Recovered",
+                            f"{batch_result['recovered_transactions']:,}"
                         )
 
+                    with c3:
+
+                        st.metric(
+                            "Remaining Failed",
+                            f"{batch_result['remaining_failed']:,}"
+                        )
+
+                    with c4:
+
+                        st.metric(
+                            "Batch Recovery Rate",
+                            f"{batch_result['recovery_rate'] * 100:.2f}%"
+                        )
+
+                    c1, c2, c3 = st.columns(3)
+
+                    with c1:
+
+                        st.metric(
+                            "Success Improvement",
+                            f"+{batch_result['success_rate_improvement'] * 100:.2f} pp"
+                        )
+
+                    with c2:
+
+                        st.metric(
+                            "Expected Additional Successes",
+                            f"{batch_result['expected_additional_successes']:.1f}"
+                        )
+
+                    with c3:
+
+                        st.metric(
+                            "Recommended Bank",
+                            batch_result["alternative_bank"]
+                        )
+
+                    c1, c2 = st.columns(2)
+
+                    with c1:
+
+                        st.metric(
+                            "Estimated Recovered Value",
+                            f"₹{batch_result['estimated_recovered_value']:,.2f}"
+                        )
+
+                    with c2:
+
+                        st.metric(
+                            "Simulated Recovered Value",
+                            f"₹{batch_result['simulated_recovered_value']:,.2f}"
+                        )
 
                     st.markdown(
                         f"""
 <div class="explanation-card">
 
-<b>Simulation outcome:</b>
+<b>Counterfactual batch result:</b>
 
-Eligible
-<b>{payment_method} + {device_type}</b>
-traffic is hypothetically shifted from
-<b>{simulation['current_bank']}</b>
-to
-<b>{simulation['alternative_bank']}</b>.
-
-<br><br>
-
-Expected success improves by
-<b>
-{simulation['success_rate_improvement'] * 100:.2f}
-percentage points
-</b>.
+Of
+<b>{batch_result['eligible_transactions']:,}</b>
+eligible failed transactions,
+<b>{batch_result['recovered_transactions']:,}</b>
+are simulated as recovered by shifting eligible traffic from
+<b>{batch_result['alternative_bank']}</b>
+according to the recovery strategy.
 
 <br><br>
 
-Estimated recoverable value:
-<b>
-₹{simulation['estimated_recovered_value']:,.2f}
-</b>.
+<b>{batch_result['remaining_failed']:,}</b>
+transactions remain failed in the simulation, while the batch recovery rate reaches
+<b>{batch_result['recovery_rate'] * 100:.2f}%</b>.
+
+<br><br>
+
+The model expected approximately
+<b>{batch_result['expected_additional_successes']:.1f}</b>
+additional successes, while the batch simulation produced
+<b>{batch_result['recovered_transactions']:,}</b>
+simulated recoveries.
+
+<br><br>
+
+<b>Estimated recoverable value:</b>
+₹{batch_result['estimated_recovered_value']:,.2f}
+<br>
+
+<b>Simulated recovered value:</b>
+₹{batch_result['simulated_recovered_value']:,.2f}
+
+<br><br>
+
+These are counterfactual simulation results, not real payment outcomes.
 
 </div>
 """,
                         unsafe_allow_html=True
                     )
 
-
                     st.markdown(
                         '</div>',
                         unsafe_allow_html=True
                     )
 
-
-                else:
+                elif batch_result == {}:
 
                     st.warning(
-                        "Recovery simulation could not be completed."
+                        "Batch recovery simulation returned no eligible transactions."
                     )
-
 
         elif decision == "ESCALATE":
 
@@ -1807,7 +1814,6 @@ Estimated recoverable value:
                 "🔒 Simulation is locked because the "
                 "policy engine requires human review."
             )
-
 
         else:
 
