@@ -1,0 +1,2060 @@
+import streamlit as st
+import pandas as pd
+import sys
+from pathlib import Path
+
+
+# =========================================
+# PATH CONFIGURATION
+# =========================================
+
+BASE_DIR = Path(__file__).resolve().parent
+
+SRC_DIR = BASE_DIR / "src"
+
+sys.path.append(str(SRC_DIR))
+
+
+# =========================================
+# BACKEND IMPORTS
+# =========================================
+
+from agent import (
+    load_data,
+    detect_incident,
+    analyze_root_cause,
+    calculate_revenue_impact,
+    recommend_recovery
+)
+
+from recovery_simulator import (
+    simulate_recovery
+)
+
+from policy_engine import (
+    evaluate_recovery_policy
+)
+
+from batch_recovery import (
+    execute_batch_recovery
+)
+
+from audit_logger import (
+    load_audit_log
+)
+
+
+# =========================================
+# PAGE CONFIGURATION
+# =========================================
+
+st.set_page_config(
+    page_title="AI Payment Recovery",
+    page_icon="💳",
+    layout="wide",
+    initial_sidebar_state="collapsed"
+)
+
+
+# =========================================
+# CUSTOM CSS
+# =========================================
+
+st.markdown(
+    """
+<style>
+
+.block-container {
+    max-width: 1400px;
+    padding-top: 2rem;
+    padding-bottom: 3rem;
+}
+
+
+/* ========================================
+   HEADER
+   ======================================== */
+
+.product-title {
+    font-size: 2.2rem;
+    font-weight: 750;
+    margin-bottom: 0.15rem;
+}
+
+.product-subtitle {
+    color: #8b949e;
+    font-size: 1rem;
+    margin-bottom: 1.2rem;
+}
+
+
+/* ========================================
+   STATUS
+   ======================================== */
+
+.status-row {
+    display: flex;
+    align-items: center;
+    gap: 9px;
+    margin-top: 0.5rem;
+    margin-bottom: 0.7rem;
+}
+
+.status-dot {
+    width: 12px;
+    height: 12px;
+    border-radius: 50%;
+    display: inline-block;
+    background: #ff3b30;
+}
+
+
+/* ========================================
+   CARDS
+   ======================================== */
+
+.incident-card {
+    border: 1px solid rgba(255,255,255,0.12);
+    border-radius: 14px;
+    padding: 1.2rem;
+    margin-bottom: 1.2rem;
+    background: rgba(255,255,255,0.025);
+}
+
+.route-label {
+    color: #8b949e;
+    font-size: 0.78rem;
+    margin-bottom: 0.25rem;
+}
+
+.route-value {
+    font-size: 1.8rem;
+    font-weight: 700;
+}
+
+
+/* ========================================
+   SECTION
+   ======================================== */
+
+.section-title {
+    font-size: 1.4rem;
+    font-weight: 700;
+    margin-top: 1.2rem;
+    margin-bottom: 0.8rem;
+}
+
+
+/* ========================================
+   EXPLANATION
+   ======================================== */
+
+.explanation-card {
+    border-left: 4px solid #4da3ff;
+    padding: 0.8rem 1rem;
+    border-radius: 6px;
+    background: rgba(77,163,255,0.08);
+    margin: 0.8rem 0 1rem 0;
+}
+
+
+/* ========================================
+   RECOVERY
+   ======================================== */
+
+.recovery-card {
+    border: 1px solid rgba(255,255,255,0.12);
+    border-radius: 14px;
+    padding: 1.3rem;
+    background: rgba(255,255,255,0.025);
+}
+
+
+/* ========================================
+   POLICY
+   ======================================== */
+
+.policy-recover {
+    border-left: 4px solid #32cd64;
+    padding: 0.9rem 1rem;
+    border-radius: 6px;
+    background: rgba(50,205,100,0.08);
+}
+
+.policy-stop {
+    border-left: 4px solid #ff3b30;
+    padding: 0.9rem 1rem;
+    border-radius: 6px;
+    background: rgba(255,59,48,0.08);
+}
+
+.policy-escalate {
+    border-left: 4px solid #ffb020;
+    padding: 0.9rem 1rem;
+    border-radius: 6px;
+    background: rgba(255,176,32,0.08);
+}
+
+
+/* ========================================
+   SIMULATION
+   ======================================== */
+
+.simulation-result {
+    border: 1px solid rgba(50,205,100,0.25);
+    border-radius: 14px;
+    padding: 1.2rem;
+    background: rgba(50,205,100,0.05);
+    margin-top: 1rem;
+}
+
+
+/* ========================================
+   AUDIT
+   ======================================== */
+
+.audit-card {
+    border: 1px solid rgba(255,255,255,0.12);
+    border-radius: 14px;
+    padding: 1.2rem;
+    background: rgba(255,255,255,0.025);
+}
+
+
+/* ========================================
+   FOOTER
+   ======================================== */
+
+.footer {
+    color: #6e7681;
+    font-size: 0.78rem;
+    text-align: center;
+    margin-top: 2rem;
+}
+
+</style>
+""",
+    unsafe_allow_html=True
+)
+
+
+# =========================================
+# HEADER
+# =========================================
+
+st.markdown(
+    '<div class="product-title">'
+    'AI Payment Recovery Agent'
+    '</div>',
+    unsafe_allow_html=True
+)
+
+st.markdown(
+    '<div class="product-subtitle">'
+    'Autonomous payment monitoring, diagnosis and recovery intelligence'
+    '</div>',
+    unsafe_allow_html=True
+)
+
+st.caption(
+    "SIMULATION ENVIRONMENT • NO LIVE PAYMENT ROUTING"
+)
+
+
+# =========================================
+# LOAD DATA
+# =========================================
+
+try:
+
+    transactions = load_data()
+
+except Exception as e:
+
+    st.error(
+        f"Unable to load transaction data: {e}"
+    )
+
+    st.stop()
+
+
+# =========================================
+# PAYMENT HEALTH
+# =========================================
+
+overall_success = (
+    transactions["status"] == "SUCCESS"
+).mean()
+
+total_transactions = len(
+    transactions
+)
+
+failed_transactions = (
+    transactions["status"] == "FAILED"
+).sum()
+
+failed_amount = transactions.loc[
+    transactions["status"] == "FAILED",
+    "amount"
+].sum()
+
+
+st.markdown(
+    '<div class="section-title">'
+    'Payment Health'
+    '</div>',
+    unsafe_allow_html=True
+)
+
+
+col1, col2, col3, col4 = st.columns(4)
+
+
+with col1:
+
+    st.metric(
+        "Success Rate",
+        f"{overall_success * 100:.2f}%"
+    )
+
+
+with col2:
+
+    st.metric(
+        "Transactions",
+        f"{total_transactions:,}"
+    )
+
+
+with col3:
+
+    st.metric(
+        "Failed Transactions",
+        f"{failed_transactions:,}"
+    )
+
+
+with col4:
+
+    st.metric(
+        "Failed Amount",
+        f"₹{failed_amount:,.0f}"
+    )
+
+
+# =========================================
+# DETECT INCIDENT
+# =========================================
+
+incident = detect_incident(
+    transactions
+)
+
+
+if incident is None:
+
+    st.success(
+        "🟢 Payment system operating normally. "
+        "No significant degradation detected."
+    )
+
+else:
+
+    # =====================================
+    # INCIDENT VALUES
+    # =====================================
+
+    payment_method = (
+        incident["payment_method"]
+    )
+
+    affected_bank = (
+        incident["bank"]
+    )
+
+    device_type = (
+        incident["device_type"]
+    )
+
+    route = (
+        f"{payment_method} "
+        f"→ {affected_bank} "
+        f"→ {device_type}"
+    )
+
+    incident_success = (
+        incident["success_rate"]
+        * 100
+    )
+
+    baseline_success = (
+        incident["baseline_success_rate"]
+        * 100
+    )
+
+    degradation = (
+        incident[
+            "degradation_percentage_points"
+        ]
+    )
+
+    incident_start = pd.Timestamp(
+        incident["time_window"]
+    )
+
+    incident_end = (
+        incident_start
+        + pd.Timedelta(hours=1)
+    )
+
+
+    # =====================================
+    # ACTIVE INCIDENT
+    # =====================================
+
+    st.divider()
+
+    st.markdown(
+        """
+<div class="status-row">
+<span class="status-dot"></span>
+<span style="font-size:1.4rem;font-weight:700;">
+Active Payment Incident
+</span>
+</div>
+""",
+        unsafe_allow_html=True
+    )
+
+    st.markdown(
+        f"""
+<div class="incident-card">
+
+<div class="route-label">
+AFFECTED PAYMENT ROUTE
+</div>
+
+<div class="route-value">
+{route}
+</div>
+
+</div>
+""",
+        unsafe_allow_html=True
+    )
+
+
+    col1, col2, col3, col4 = st.columns(4)
+
+
+    with col1:
+
+        st.metric(
+            "Current Success",
+            f"{incident_success:.2f}%"
+        )
+
+
+    with col2:
+
+        st.metric(
+            "Historical Baseline",
+            f"{baseline_success:.2f}%"
+        )
+
+
+    with col3:
+
+        st.metric(
+            "Degradation",
+            f"-{degradation:.2f} pp"
+        )
+
+
+    with col4:
+
+        st.metric(
+            "Affected Transactions",
+            f"{int(incident['transactions']):,}"
+        )
+
+
+    st.info(
+        f"Incident window: "
+        f"{incident_start} → {incident_end}"
+    )
+
+
+    # =====================================
+    # INCIDENT TIMELINE
+    # =====================================
+
+    st.markdown(
+        '<div class="section-title">'
+        '📈 Incident Timeline'
+        '</div>',
+        unsafe_allow_html=True
+    )
+
+
+    timeline = transactions.copy()
+
+    timeline["timestamp"] = pd.to_datetime(
+        timeline["timestamp"],
+        format="mixed"
+    )
+
+    timeline["hour"] = (
+        timeline["timestamp"]
+        .dt.floor("1h")
+    )
+
+
+    hourly = (
+        timeline
+        .groupby("hour")
+        .agg(
+            transactions=(
+                "transaction_id",
+                "count"
+            ),
+
+            successful=(
+                "status",
+                lambda x:
+                (x == "SUCCESS").sum()
+            )
+        )
+        .reset_index()
+    )
+
+
+    hourly["success_rate"] = (
+        hourly["successful"]
+        / hourly["transactions"]
+        * 100
+    )
+
+
+    hourly = hourly.sort_values(
+        "hour"
+    )
+
+
+    st.line_chart(
+        hourly.set_index("hour")[
+            "success_rate"
+        ],
+        height=300,
+        use_container_width=True
+    )
+
+
+    incident_row = hourly[
+        hourly["hour"] == incident_start
+    ]
+
+
+    if not incident_row.empty:
+
+        incident_rate = float(
+            incident_row.iloc[0][
+                "success_rate"
+            ]
+        )
+
+        st.error(
+            f"🔴 Incident detected at "
+            f"{incident_start.strftime('%Y-%m-%d %H:%M')} — "
+            f"overall system success rate during this hour: "
+            f"{incident_rate:.2f}%"
+        )
+
+
+    # =====================================
+    # ROOT CAUSE
+    # =====================================
+
+    st.markdown(
+        '<div class="section-title">'
+        '🧠 AI Root Cause Analysis'
+        '</div>',
+        unsafe_allow_html=True
+    )
+
+
+    root_cause = analyze_root_cause(
+        transactions,
+        incident
+    )
+
+
+    col1, col2 = st.columns(2)
+
+
+    with col1:
+
+        st.markdown(
+            "### Primary Diagnosis"
+        )
+
+        st.markdown(
+            f"#### {route}"
+        )
+
+        st.markdown(
+            f"""
+<div class="explanation-card">
+
+The agent identified
+<b>{route}</b>
+as the strongest degraded payment route
+during the incident window.
+
+</div>
+""",
+            unsafe_allow_html=True
+        )
+
+
+        st.metric(
+            "AI Confidence",
+            f"{root_cause['confidence']}%"
+        )
+
+
+        c1, c2 = st.columns(2)
+
+
+        with c1:
+
+            st.metric(
+                "Route Failure",
+                f"{root_cause['route_failure_rate'] * 100:.2f}%"
+            )
+
+
+        with c2:
+
+            st.metric(
+                "Normal Failure",
+                f"{root_cause['baseline_failure_rate'] * 100:.2f}%"
+            )
+
+
+    with col2:
+
+        st.markdown(
+            "### Failure Reasons"
+        )
+
+        error_analysis = root_cause[
+            "error_analysis"
+        ]
+
+
+        if not error_analysis.empty:
+
+            display_errors = (
+                error_analysis.copy()
+            )
+
+            display_errors[
+                "percentage"
+            ] = (
+                display_errors[
+                    "percentage"
+                ].round(2)
+            )
+
+
+            display_errors = (
+                display_errors.rename(
+                    columns={
+                        "error_code":
+                            "Error Code",
+
+                        "failures":
+                            "Failures",
+
+                        "percentage":
+                            "Share (%)"
+                    }
+                )
+            )
+
+
+            st.dataframe(
+                display_errors[
+                    [
+                        "Error Code",
+                        "Failures",
+                        "Share (%)"
+                    ]
+                ],
+                use_container_width=True,
+                hide_index=True
+            )
+
+        else:
+
+            st.info(
+                "No failure reason data available."
+            )
+
+
+    # =====================================
+    # BUSINESS IMPACT
+    # =====================================
+
+    st.divider()
+
+
+    st.markdown(
+        '<div class="section-title">'
+        '💰 Business Impact'
+        '</div>',
+        unsafe_allow_html=True
+    )
+
+
+    impact = calculate_revenue_impact(
+        transactions,
+        incident
+    )
+
+
+    if impact:
+
+        col1, col2, col3 = st.columns(3)
+
+
+        with col1:
+
+            st.metric(
+                "Actual Failures",
+                f"{impact['actual_failures']:,}"
+            )
+
+
+        with col2:
+
+            st.metric(
+                "Excess Failures",
+                f"{impact['excess_failures']:.1f}"
+            )
+
+
+        with col3:
+
+            st.metric(
+                "Revenue at Risk",
+                f"₹{impact['revenue_at_risk']:,.0f}"
+            )
+
+
+    # =====================================
+    # RECOVERY DECISION
+    # =====================================
+
+    st.markdown(
+        '<div class="section-title">'
+        '⚡ AI Recovery Decision'
+        '</div>',
+        unsafe_allow_html=True
+    )
+
+
+    recovery = recommend_recovery(
+        transactions,
+        incident
+    )
+
+
+    # =====================================
+    # POLICY GATE
+    # =====================================
+
+    if recovery:
+
+        policy_result = (
+            evaluate_recovery_policy(
+                transactions,
+                incident,
+                recovery,
+                recovery_attempts=0
+            )
+        )
+
+    else:
+
+        policy_result = {
+            "decision":
+                "STOP",
+
+            "approved":
+                False,
+
+            "reason":
+                "No recovery recommendation available.",
+
+            "checks":
+                []
+        }
+
+
+    # =====================================
+    # RECOVERY INFORMATION
+    # =====================================
+
+    if recovery:
+
+        simulation_preview = (
+            simulate_recovery(
+                transactions,
+                incident,
+                recovery
+            )
+        )
+
+
+        st.markdown(
+            '<div class="recovery-card">',
+            unsafe_allow_html=True
+        )
+
+
+        col1, col2, col3 = st.columns(3)
+
+
+        with col1:
+
+            st.metric(
+                "Current Bank",
+                affected_bank
+            )
+
+
+        with col2:
+
+            st.metric(
+                "Proposed Bank",
+                recovery[
+                    "alternative_bank"
+                ]
+            )
+
+
+        with col3:
+
+            st.metric(
+                "Historical Success",
+                f"{recovery['alternative_success_rate'] * 100:.2f}%"
+            )
+
+
+        st.markdown(
+            f"""
+<div class="explanation-card">
+
+<b>Why {recovery['alternative_bank']}?</b>
+
+<br><br>
+
+Historical comparable
+<b>{payment_method} + {device_type}</b>
+traffic shows a
+<b>
+{recovery['alternative_success_rate'] * 100:.2f}%
+</b>
+success rate, providing a stronger alternative
+to the degraded
+<b>{affected_bank}</b>
+route.
+
+</div>
+""",
+            unsafe_allow_html=True
+        )
+
+
+        if simulation_preview:
+
+            c1, c2 = st.columns(2)
+
+
+            with c1:
+
+                st.metric(
+                    "Potential Additional Successes",
+                    f"+{simulation_preview['additional_successes']}"
+                )
+
+
+            with c2:
+
+                st.metric(
+                    "Estimated Recoverable Value",
+                    f"₹{simulation_preview['estimated_recovered_value']:,.2f}"
+                )
+
+
+        st.markdown(
+            '</div>',
+            unsafe_allow_html=True
+        )
+
+
+    else:
+
+        st.warning(
+            "No suitable recovery recommendation is currently available."
+        )
+
+
+    # =====================================
+    # POLICY DISPLAY
+    # =====================================
+
+    st.markdown(
+        '<div class="section-title">'
+        '🛡️ Recovery Policy Gate'
+        '</div>',
+        unsafe_allow_html=True
+    )
+
+
+    decision = policy_result[
+        "decision"
+    ]
+
+
+    if decision == "RECOVER":
+
+        st.markdown(
+            f"""
+<div class="policy-recover">
+
+<h3>🟢 RECOVER — Approved</h3>
+
+<b>Decision:</b> {decision}
+
+<br><br>
+
+<b>Policy reason:</b><br>
+{policy_result['reason']}
+
+</div>
+""",
+            unsafe_allow_html=True
+        )
+
+
+    elif decision == "ESCALATE":
+
+        st.markdown(
+            f"""
+<div class="policy-escalate">
+
+<h3>🟡 ESCALATE — Human Review Required</h3>
+
+<b>Decision:</b> {decision}
+
+<br><br>
+
+<b>Policy reason:</b><br>
+{policy_result['reason']}
+
+</div>
+""",
+            unsafe_allow_html=True
+        )
+
+
+    else:
+
+        st.markdown(
+            f"""
+<div class="policy-stop">
+
+<h3>🔴 STOP — Recovery Blocked</h3>
+
+<b>Decision:</b> {decision}
+
+<br><br>
+
+<b>Policy reason:</b><br>
+{policy_result['reason']}
+
+</div>
+""",
+            unsafe_allow_html=True
+        )
+
+
+    # =====================================
+    # POLICY CHECKS
+    # =====================================
+
+    if policy_result["checks"]:
+
+        st.markdown(
+            "### Policy Checks"
+        )
+
+
+        policy_rows = []
+
+
+        for check in policy_result[
+            "checks"
+        ]:
+
+            policy_rows.append({
+                "Status":
+                    "✅ PASS"
+                    if check["passed"]
+                    else
+                    "❌ FAIL",
+
+                "Policy Check":
+                    check["check"],
+
+                "Value":
+                    check["value"],
+
+                "Threshold":
+                    check["threshold"]
+            })
+
+
+        policy_df = pd.DataFrame(
+            policy_rows
+        )
+
+
+        st.dataframe(
+            policy_df,
+            use_container_width=True,
+            hide_index=True
+        )
+
+
+        passed_checks = sum(
+            check["passed"]
+            for check in policy_result[
+                "checks"
+            ]
+        )
+
+
+        total_checks = len(
+            policy_result["checks"]
+        )
+
+
+        st.caption(
+            f"{passed_checks}/{total_checks} "
+            f"policy checks passed."
+        )
+
+
+    # =====================================
+    # RECOMMENDED ACTION
+    # =====================================
+
+    if recovery:
+
+        if decision == "RECOVER":
+
+            st.success(
+                f"⚡ Approved action: Prefer "
+                f"{recovery['alternative_bank']} "
+                f"for eligible "
+                f"{payment_method} + "
+                f"{device_type} traffic."
+            )
+
+
+        elif decision == "ESCALATE":
+
+            st.warning(
+                "⚠️ Automated recovery is not approved. "
+                "Human review is required before routing changes."
+            )
+
+
+        else:
+
+            st.error(
+                "🛑 Automated recovery is blocked "
+                "by the policy engine."
+            )
+
+
+    # =====================================
+    # ALTERNATIVE ROUTE ANALYSIS
+    # =====================================
+
+    st.markdown(
+        '<div class="section-title">'
+        '🏦 Alternative Route Analysis'
+        '</div>',
+        unsafe_allow_html=True
+    )
+
+
+    historical = transactions[
+        ~(
+            (transactions["timestamp"] >= incident_start)
+            &
+            (transactions["timestamp"] < incident_end)
+        )
+    ].copy()
+
+
+    route_data = historical[
+        (historical["payment_method"]
+         == payment_method)
+        &
+        (historical["device_type"]
+         == device_type)
+    ].copy()
+
+
+    route_comparison = (
+        route_data
+        .groupby("bank")
+        .agg(
+            transactions=(
+                "transaction_id",
+                "count"
+            ),
+
+            successful=(
+                "status",
+                lambda x:
+                (x == "SUCCESS").sum()
+            ),
+
+            failed=(
+                "status",
+                lambda x:
+                (x == "FAILED").sum()
+            )
+        )
+        .reset_index()
+    )
+
+
+    if not route_comparison.empty:
+
+        route_comparison["success_rate"] = (
+            route_comparison["successful"]
+            / route_comparison["transactions"]
+            * 100
+        )
+
+
+        route_comparison = (
+            route_comparison[
+                route_comparison["transactions"]
+                >= 100
+            ]
+            .copy()
+        )
+
+
+        route_comparison = (
+            route_comparison
+            .sort_values(
+                "success_rate",
+                ascending=False
+            )
+        )
+
+
+        def get_route_status(bank):
+
+            if bank == affected_bank:
+
+                return "🔴 Degraded"
+
+
+            if (
+                recovery
+                and bank
+                == recovery[
+                    "alternative_bank"
+                ]
+            ):
+
+                if decision == "RECOVER":
+
+                    return "🟢 Recommended"
+
+                elif decision == "ESCALATE":
+
+                    return "🟡 Proposed"
+
+                else:
+
+                    return "⚪ Blocked"
+
+
+            return "Normal"
+
+
+        route_comparison[
+            "status"
+        ] = (
+            route_comparison[
+                "bank"
+            ].apply(
+                get_route_status
+            )
+        )
+
+
+        display_routes = (
+            route_comparison.rename(
+                columns={
+                    "bank":
+                        "Bank",
+
+                    "transactions":
+                        "Transactions",
+
+                    "successful":
+                        "Successful",
+
+                    "failed":
+                        "Failed",
+
+                    "success_rate":
+                        "Success Rate (%)",
+
+                    "status":
+                        "Route Status"
+                }
+            )
+        )
+
+
+        st.dataframe(
+            display_routes[
+                [
+                    "Bank",
+                    "Transactions",
+                    "Successful",
+                    "Failed",
+                    "Success Rate (%)",
+                    "Route Status"
+                ]
+            ].style.format({
+                "Success Rate (%)":
+                    "{:.2f}"
+            }),
+            use_container_width=True,
+            hide_index=True
+        )
+
+
+    else:
+
+        st.info(
+            "No sufficient historical alternative "
+            "route data available."
+        )
+
+
+    # =====================================
+    # AGENT DECISION TRAIL
+    # =====================================
+
+    st.markdown(
+        '<div class="section-title">'
+        '🤖 Agent Decision Trail'
+        '</div>',
+        unsafe_allow_html=True
+    )
+
+
+    steps = [
+
+        (
+            "1",
+            "🔴 DETECT",
+            "Payment degradation detected",
+            (
+                f"{route} dropped to "
+                f"{incident_success:.2f}% success."
+            )
+        ),
+
+        (
+            "2",
+            "🧠 DIAGNOSE",
+            "Root cause isolated",
+            (
+                f"{affected_bank} is the dominant "
+                f"degraded bank on this route."
+            )
+        ),
+
+        (
+            "3",
+            "💰 QUANTIFY",
+            "Business impact calculated",
+            (
+                f"₹{impact['revenue_at_risk']:,.0f} "
+                f"estimated revenue at risk."
+                if impact
+                else
+                "Business impact calculated."
+            )
+        ),
+
+        (
+            "4",
+            "🏦 COMPARE",
+            "Alternative routes evaluated",
+            (
+                f"{recovery['alternative_bank']} "
+                f"selected from eligible "
+                f"{payment_method} + "
+                f"{device_type} alternatives."
+                if recovery
+                else
+                "Alternative routes evaluated."
+            )
+        ),
+
+        (
+            "5",
+            "🛡️ POLICY",
+            "Recovery policy evaluated",
+            (
+                f"Policy decision: "
+                f"{decision}."
+            )
+        ),
+
+        (
+            "6",
+            "⚡ RECOMMEND",
+            "Recovery strategy generated",
+            (
+                f"Prefer "
+                f"{recovery['alternative_bank']} "
+                f"for eligible "
+                f"{payment_method} + "
+                f"{device_type} traffic."
+                if (
+                    recovery
+                    and decision == "RECOVER"
+                )
+                else
+                "Recovery strategy requires review "
+                "or was blocked."
+            )
+        )
+    ]
+
+
+    for number, title, heading, description in steps:
+
+        with st.container(border=True):
+
+            col1, col2, col3 = st.columns(
+                [0.7, 1.4, 4]
+            )
+
+
+            with col1:
+
+                st.markdown(
+                    f"### {number}"
+                )
+
+
+            with col2:
+
+                st.markdown(
+                    f"**{title}**"
+                )
+
+
+            with col3:
+
+                st.markdown(
+                    f"**{heading}**"
+                )
+
+                st.caption(
+                    description
+                )
+
+
+    # =====================================
+    # RECOVERY SIMULATION
+    # =====================================
+
+    st.markdown(
+        '<div class="section-title">'
+        '🔬 Recovery Simulation'
+        '</div>',
+        unsafe_allow_html=True
+    )
+
+
+    st.caption(
+        "Counterfactual simulation — no real payment "
+        "routing is performed."
+    )
+
+
+    if recovery:
+
+        if decision == "RECOVER":
+
+            simulate = st.button(
+                "🚀 Simulate Approved Recovery",
+                type="primary",
+                use_container_width=True
+            )
+
+
+            if simulate:
+
+                simulation = simulate_recovery(
+                    transactions,
+                    incident,
+                    recovery
+                )
+
+
+                if simulation:
+
+                    st.success(
+                        "Approved recovery strategy simulated successfully."
+                    )
+
+
+                    before_col, after_col = (
+                        st.columns(2)
+                    )
+
+
+                    with before_col:
+
+                        st.markdown(
+                            "### 🔴 Before"
+                        )
+
+                        st.metric(
+                            "Route",
+                            simulation[
+                                "current_bank"
+                            ]
+                        )
+
+                        st.metric(
+                            "Success Rate",
+                            f"{simulation['before_success_rate'] * 100:.2f}%"
+                        )
+
+                        st.metric(
+                            "Successful Payments",
+                            f"{simulation['before_successes']:,}"
+                        )
+
+                        st.metric(
+                            "Failed Payments",
+                            f"{simulation['before_failures']:,}"
+                        )
+
+
+                    with after_col:
+
+                        st.markdown(
+                            "### 🟢 Simulated After"
+                        )
+
+                        st.metric(
+                            "Route",
+                            simulation[
+                                "alternative_bank"
+                            ]
+                        )
+
+                        st.metric(
+                            "Success Rate",
+                            f"{simulation['after_success_rate'] * 100:.2f}%",
+                            delta=(
+                                f"+"
+                                f"{simulation['success_rate_improvement'] * 100:.2f}"
+                                f" pp"
+                            )
+                        )
+
+                        st.metric(
+                            "Successful Payments",
+                            f"{simulation['after_successes']:,}",
+                            delta=(
+                                f"+"
+                                f"{simulation['additional_successes']}"
+                            )
+                        )
+
+                        st.metric(
+                            "Failed Payments",
+                            f"{simulation['after_failures']:,}"
+                        )
+
+
+                    st.markdown(
+                        '<div class="simulation-result">',
+                        unsafe_allow_html=True
+                    )
+
+
+                    c1, c2 = st.columns(2)
+
+
+                    with c1:
+
+                        st.metric(
+                            "Additional Successful Payments",
+                            f"+{simulation['additional_successes']}"
+                        )
+
+
+                    with c2:
+
+                        st.metric(
+                            "Estimated Recoverable Value",
+                            f"₹{simulation['estimated_recovered_value']:,.2f}"
+                        )
+
+
+                    st.markdown(
+                        f"""
+<div class="explanation-card">
+
+<b>Simulation outcome:</b>
+
+Eligible
+<b>{payment_method} + {device_type}</b>
+traffic is hypothetically shifted from
+<b>{simulation['current_bank']}</b>
+to
+<b>{simulation['alternative_bank']}</b>.
+
+<br><br>
+
+Expected success improves by
+<b>
+{simulation['success_rate_improvement'] * 100:.2f}
+percentage points
+</b>.
+
+<br><br>
+
+Estimated recoverable value:
+<b>
+₹{simulation['estimated_recovered_value']:,.2f}
+</b>.
+
+</div>
+""",
+                        unsafe_allow_html=True
+                    )
+
+
+                    st.markdown(
+                        '</div>',
+                        unsafe_allow_html=True
+                    )
+
+
+                else:
+
+                    st.warning(
+                        "Recovery simulation could not be completed."
+                    )
+
+
+        elif decision == "ESCALATE":
+
+            st.warning(
+                "🔒 Simulation is locked because the "
+                "policy engine requires human review."
+            )
+
+
+        else:
+
+            st.error(
+                "🔒 Simulation is locked because the "
+                "policy engine blocked automated recovery."
+            )
+
+
+# =========================================
+# AUDIT TRAIL
+# =========================================
+
+st.divider()
+
+
+st.markdown(
+    '<div class="section-title">'
+    '📋 Recovery Audit Trail'
+    '</div>',
+    unsafe_allow_html=True
+)
+
+
+st.caption(
+    "Persistent history of bounded agent recovery decisions."
+)
+
+
+# =========================================
+# RUN RECOVERY ANALYSIS
+# =========================================
+
+run_analysis = st.button(
+    "🚀 Run Recovery Analysis",
+    type="primary",
+    use_container_width=True
+)
+
+
+if run_analysis:
+
+    with st.spinner(
+        "Running recovery analysis and recording audit event..."
+    ):
+
+        try:
+
+            execution_result = (
+                execute_batch_recovery()
+            )
+
+            if execution_result is not None:
+
+                st.success(
+                    "Recovery analysis completed and "
+                    "audit event recorded."
+                )
+
+                # Force Streamlit to reload the
+                # newly written audit log.
+                st.rerun()
+
+            else:
+
+                st.warning(
+                    "Recovery analysis could not be completed."
+                )
+
+        except Exception as e:
+
+            st.error(
+                f"Recovery analysis failed: {e}"
+            )
+
+
+# =========================================
+# LOAD AUDIT HISTORY
+# =========================================
+
+audit_log = load_audit_log()
+
+
+if audit_log is None:
+
+    st.info(
+        "No audit history available yet."
+    )
+
+elif audit_log.empty:
+
+    st.info(
+        "No recovery decisions have been recorded yet."
+    )
+
+else:
+
+    # =====================================
+    # SUMMARY METRICS
+    # =====================================
+
+    total_runs = len(
+        audit_log
+    )
+
+
+    approved_runs = (
+        audit_log[
+            audit_log["policy_decision"]
+            == "RECOVER"
+        ]
+        .shape[0]
+    )
+
+
+    stopped_runs = (
+        audit_log[
+            audit_log["policy_decision"]
+            == "STOP"
+        ]
+        .shape[0]
+    )
+
+
+    escalated_runs = (
+        audit_log[
+            audit_log["policy_decision"]
+            == "ESCALATE"
+        ]
+        .shape[0]
+    )
+
+
+    total_recovered = pd.to_numeric(
+        audit_log[
+            "recovered_transactions"
+        ],
+        errors="coerce"
+    ).fillna(0).sum()
+
+
+    total_expected_recovery = pd.to_numeric(
+        audit_log[
+            "expected_additional_successes"
+        ],
+        errors="coerce"
+    ).fillna(0).sum()
+
+
+    total_estimated_value = pd.to_numeric(
+        audit_log[
+            "estimated_recovered_value"
+        ],
+        errors="coerce"
+    ).fillna(0).sum()
+
+
+    total_simulated_value = pd.to_numeric(
+        audit_log[
+            "simulated_recovered_value"
+        ],
+        errors="coerce"
+    ).fillna(0).sum()
+
+
+    st.markdown(
+        '<div class="audit-card">',
+        unsafe_allow_html=True
+    )
+
+
+    col1, col2, col3, col4 = st.columns(4)
+
+
+    with col1:
+
+        st.metric(
+            "Recovery Runs",
+            f"{total_runs:,}"
+        )
+
+
+    with col2:
+
+        st.metric(
+            "Approved",
+            f"{approved_runs:,}"
+        )
+
+
+    with col3:
+
+        st.metric(
+            "Stopped",
+            f"{stopped_runs:,}"
+        )
+
+
+    with col4:
+
+        st.metric(
+            "Escalated",
+            f"{escalated_runs:,}"
+        )
+
+
+    st.markdown(
+        "</div>",
+        unsafe_allow_html=True
+    )
+
+
+    # =====================================
+    # CUMULATIVE RECOVERY
+    # =====================================
+
+    c1, c2, c3 = st.columns(3)
+
+
+    with c1:
+
+        st.metric(
+            "Expected Additional Successes",
+            f"{total_expected_recovery:,.1f}"
+        )
+
+
+    with c2:
+
+        st.metric(
+            "Simulated Recoveries",
+            f"{int(total_recovered):,}"
+        )
+
+
+    with c3:
+
+        st.metric(
+            "Estimated Recovery Value",
+            f"₹{total_estimated_value:,.2f}"
+        )
+
+
+    st.caption(
+        f"Cumulative simulated recovered value: "
+        f"₹{total_simulated_value:,.2f}"
+    )
+
+
+    # =====================================
+    # AUDIT TABLE
+    # =====================================
+
+    st.markdown(
+        "### Decision History"
+    )
+
+
+    audit_display = audit_log.copy()
+
+
+    # Format timestamp
+
+    if "timestamp" in audit_display.columns:
+
+        audit_display[
+            "timestamp"
+        ] = pd.to_datetime(
+            audit_display[
+                "timestamp"
+            ],
+            errors="coerce"
+        )
+
+
+    # Create route
+
+    if all(
+        column in audit_display.columns
+        for column in [
+            "payment_method",
+            "affected_bank",
+            "device_type"
+        ]
+    ):
+
+        audit_display[
+            "route"
+        ] = (
+            audit_display[
+                "payment_method"
+            ].astype(str)
+            + " → "
+            + audit_display[
+                "affected_bank"
+            ].astype(str)
+            + " → "
+            + audit_display[
+                "device_type"
+            ].astype(str)
+        )
+
+
+    # Numeric formatting
+
+    numeric_columns = [
+        "success_rate_before",
+        "success_rate_after",
+        "success_improvement_pp",
+        "expected_additional_successes",
+        "estimated_recovered_value",
+        "simulated_recovered_value",
+        "average_transaction_value"
+    ]
+
+
+    for column in numeric_columns:
+
+        if column in audit_display.columns:
+
+            audit_display[column] = pd.to_numeric(
+                audit_display[column],
+                errors="coerce"
+            )
+
+
+    # =====================================
+    # DISPLAY TABLE
+    # =====================================
+
+    display_columns = [
+        "timestamp",
+        "incident_time",
+        "route",
+        "recommended_bank",
+        "policy_decision",
+        "policy_approved",
+        "incident_transactions",
+        "failed_transactions",
+        "eligible_transactions",
+        "recovered_transactions",
+        "remaining_failed",
+        "stopped_transactions",
+        "escalated_transactions",
+        "success_improvement_pp",
+        "expected_additional_successes",
+        "estimated_recovered_value"
+    ]
+
+
+    display_columns = [
+        column
+        for column in display_columns
+        if column in audit_display.columns
+    ]
+
+
+    formatted_audit = (
+        audit_display[
+            display_columns
+        ]
+        .sort_values(
+            "timestamp",
+            ascending=False
+        )
+    )
+
+
+    rename_map = {
+
+        "timestamp":
+            "Run Time",
+
+        "incident_time":
+            "Incident",
+
+        "route":
+            "Route",
+
+        "recommended_bank":
+            "Recommended Bank",
+
+        "policy_decision":
+            "Decision",
+
+        "policy_approved":
+            "Approved",
+
+        "incident_transactions":
+            "Incident Txns",
+
+        "failed_transactions":
+            "Failed",
+
+        "eligible_transactions":
+            "Eligible",
+
+        "recovered_transactions":
+            "Recovered",
+
+        "remaining_failed":
+            "Remaining Failed",
+
+        "stopped_transactions":
+            "Stopped",
+
+        "escalated_transactions":
+            "Escalated",
+
+        "success_improvement_pp":
+            "Improvement (pp)",
+
+        "expected_additional_successes":
+            "Expected +Success",
+
+        "estimated_recovered_value":
+            "Estimated Recovery"
+    }
+
+
+    formatted_audit = (
+        formatted_audit.rename(
+            columns=rename_map
+        )
+    )
+
+
+    st.dataframe(
+        formatted_audit.style.format(
+            {
+                "Improvement (pp)":
+                    "{:.2f}",
+
+                "Expected +Success":
+                    "{:.1f}",
+
+                "Estimated Recovery":
+                    "₹{:,.2f}"
+            },
+            na_rep="-"
+        ),
+        use_container_width=True,
+        hide_index=True
+    )
+
+
+# =========================================
+# FOOTER
+# =========================================
+
+st.divider()
+
+
+st.markdown(
+    """
+<div class="footer">
+
+AI Payment Recovery Agent ·
+Simulation Environment ·
+No real payment routing or payment processing is performed
+
+</div>
+""",
+    unsafe_allow_html=True
+)
