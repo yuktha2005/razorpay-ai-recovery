@@ -145,8 +145,6 @@ def detect_incident(df):
 
     # -------------------------------------
     # HISTORICAL BASELINE
-    #
-    # Exclude the current hour.
     # -------------------------------------
 
     hourly["historical_transactions"] = (
@@ -206,11 +204,6 @@ def detect_incident(df):
 
     # -------------------------------------
     # INCIDENT SCORE
-    #
-    # Combines:
-    # - degradation
-    # - transaction volume
-    # - failed transaction value
     # -------------------------------------
 
     candidates["incident_score"] = (
@@ -596,8 +589,6 @@ def recommend_recovery(
 
     # -------------------------------------
     # Historical data
-    #
-    # Exclude incident window.
     # -------------------------------------
 
     historical = df[
@@ -608,7 +599,7 @@ def recommend_recovery(
     ].copy()
 
     # -------------------------------------
-    # Match payment method + device.
+    # Match payment method + device
     # -------------------------------------
 
     method_device_data = historical[
@@ -796,7 +787,6 @@ def evaluate_policy(
     recovery_attempts=0
 ):
 
-    # Import here to avoid circular imports.
     from policy_engine import (
         evaluate_recovery_policy
     )
@@ -810,16 +800,131 @@ def evaluate_policy(
 
 
 # =========================================
+# AI DIAGNOSIS
+# =========================================
+
+def run_ai_diagnosis(
+    df,
+    incident
+):
+    """
+    Run the Gemini diagnosis layer.
+
+    Gemini provides diagnosis only.
+    Recovery authorization remains with
+    the deterministic policy engine.
+    """
+
+    try:
+
+        from ai_diagnosis import (
+            diagnose_incident
+        )
+
+        diagnosis = diagnose_incident(
+            df,
+            incident
+        )
+
+        return diagnosis
+
+    except Exception as error:
+
+        print(
+            "\n⚠️ AI diagnosis layer unavailable."
+        )
+
+        print(
+            f"Reason: {error}"
+        )
+
+        return None
+
+
+# =========================================
+# DISPLAY AI DIAGNOSIS
+# =========================================
+
+def display_ai_diagnosis(
+    diagnosis
+):
+
+    print(
+        "\n🤖 AI DIAGNOSIS"
+    )
+
+    if diagnosis is None:
+
+        print(
+            "AI diagnosis unavailable."
+        )
+
+        print(
+            "Continuing with deterministic analysis."
+        )
+
+        return
+
+    print(
+        f"AI source:"
+        f" {diagnosis.get('source', 'unknown')}"
+    )
+
+    print(
+        f"Primary diagnosis:"
+        f" {diagnosis['primary_diagnosis']}"
+    )
+
+    print(
+        f"Severity:"
+        f" {diagnosis['severity']}"
+    )
+
+    print(
+        f"Confidence:"
+        f" {diagnosis['confidence']:.0f}%"
+    )
+
+    print(
+        f"Dominant failure pattern:"
+        f" {diagnosis['dominant_failure_pattern']}"
+    )
+
+    print(
+        f"Route-specific problem:"
+        f" {diagnosis['route_specific_problem']}"
+    )
+
+    print(
+        "\nEvidence:"
+    )
+
+    for evidence in diagnosis[
+        "evidence"
+    ]:
+
+        print(
+            f"  • {evidence}"
+        )
+
+    print(
+        "\nRecommended investigation:"
+    )
+
+    for item in diagnosis[
+        "recommended_investigation"
+    ]:
+
+        print(
+            f"  • {item}"
+        )
+
+
+# =========================================
 # COMPLETE AGENT
 # =========================================
 
 def run_agent():
-
-    df = load_data()
-
-    incident = detect_incident(
-        df
-    )
 
     print("\n")
     print("=" * 60)
@@ -827,8 +932,18 @@ def run_agent():
     print("=" * 60)
 
     # =====================================
+    # LOAD DATA
+    # =====================================
+
+    df = load_data()
+
+    # =====================================
     # DETECTION
     # =====================================
+
+    incident = detect_incident(
+        df
+    )
 
     if incident is None:
 
@@ -847,7 +962,9 @@ def run_agent():
 
         return None
 
-    print("\n🔴 INCIDENT DETECTED")
+    print(
+        "\n🔴 INCIDENT DETECTED"
+    )
 
     print(
         f"\nRoute:"
@@ -882,6 +999,19 @@ def run_agent():
     )
 
     # =====================================
+    # GEMINI AI DIAGNOSIS
+    # =====================================
+
+    ai_diagnosis = run_ai_diagnosis(
+        df,
+        incident
+    )
+
+    display_ai_diagnosis(
+        ai_diagnosis
+    )
+
+    # =====================================
     # ROOT CAUSE
     # =====================================
 
@@ -890,7 +1020,9 @@ def run_agent():
         incident
     )
 
-    print("\n🧠 ROOT CAUSE")
+    print(
+        "\n🧠 ROOT CAUSE"
+    )
 
     print(
         f"Route:"
@@ -939,7 +1071,9 @@ def run_agent():
         incident
     )
 
-    print("\n💰 BUSINESS IMPACT")
+    print(
+        "\n💰 BUSINESS IMPACT"
+    )
 
     if impact:
 
@@ -1009,7 +1143,9 @@ def run_agent():
     # POLICY GATE
     # =====================================
 
-    print("\n🛡️ POLICY GATE")
+    print(
+        "\n🛡️ POLICY GATE"
+    )
 
     if recovery:
 
@@ -1060,10 +1196,8 @@ def run_agent():
         policy_result = {
             "decision": "STOP",
             "approved": False,
-            "reason": (
-                "No recovery recommendation "
-                "available."
-            ),
+            "reason":
+                "No recovery recommendation available.",
             "checks": []
         }
 
@@ -1083,7 +1217,9 @@ def run_agent():
     # FINAL AGENT ACTION
     # =====================================
 
-    print("\n⚡ AGENT ACTION")
+    print(
+        "\n⚡ AGENT ACTION"
+    )
 
     if (
         recovery
@@ -1098,7 +1234,10 @@ def run_agent():
             f"{incident['device_type']} traffic."
         )
 
-    elif policy_result["decision"] == "ESCALATE":
+    elif (
+        policy_result["decision"]
+        == "ESCALATE"
+    ):
 
         print(
             "ESCALATE → Human review required."
@@ -1122,6 +1261,9 @@ def run_agent():
     return {
         "incident":
             incident,
+
+        "ai_diagnosis":
+            ai_diagnosis,
 
         "root_cause":
             root_cause,
