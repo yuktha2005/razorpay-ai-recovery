@@ -12,7 +12,8 @@ BASE_DIR = Path(__file__).resolve().parent
 
 SRC_DIR = BASE_DIR / "src"
 
-sys.path.append(str(SRC_DIR))
+if str(SRC_DIR) not in sys.path:
+    sys.path.append(str(SRC_DIR))
 
 
 # =========================================
@@ -25,6 +26,10 @@ from agent import (
     analyze_root_cause,
     calculate_revenue_impact,
     recommend_recovery
+)
+
+from ai_diagnosis import (
+    diagnose_incident
 )
 
 from recovery_simulator import (
@@ -155,6 +160,28 @@ st.markdown(
     border-radius: 6px;
     background: rgba(77,163,255,0.08);
     margin: 0.8rem 0 1rem 0;
+}
+
+
+/* ========================================
+   AI DIAGNOSIS
+   ======================================== */
+
+.ai-card {
+    border: 1px solid rgba(77,163,255,0.25);
+    border-radius: 14px;
+    padding: 1.2rem;
+    background: rgba(77,163,255,0.04);
+    margin-bottom: 1rem;
+}
+
+.ai-source {
+    display: inline-block;
+    border: 1px solid rgba(77,163,255,0.35);
+    border-radius: 20px;
+    padding: 0.25rem 0.7rem;
+    font-size: 0.75rem;
+    margin-bottom: 0.7rem;
 }
 
 
@@ -542,13 +569,36 @@ AFFECTED PAYMENT ROUTE
     )
 
 
-    st.line_chart(
-        hourly.set_index("hour")[
-            "success_rate"
-        ],
-        height=300,
-        use_container_width=True
-    )
+    # Focus the timeline around the detected incident so
+    # the degradation is immediately visible during a demo.
+    timeline_start = incident_start - pd.Timedelta(hours=12)
+    timeline_end = incident_start + pd.Timedelta(hours=12)
+
+    focused_hourly = hourly[
+        (hourly["hour"] >= timeline_start)
+        &
+        (hourly["hour"] <= timeline_end)
+    ].copy()
+
+    if not focused_hourly.empty:
+
+        st.line_chart(
+            focused_hourly.set_index("hour")[
+                "success_rate"
+            ],
+            height=300,
+            use_container_width=True
+        )
+
+    else:
+
+        st.line_chart(
+            hourly.set_index("hour")[
+                "success_rate"
+            ],
+            height=300,
+            use_container_width=True
+        )
 
 
     incident_row = hourly[
@@ -573,7 +623,7 @@ AFFECTED PAYMENT ROUTE
 
 
     # =====================================
-    # ROOT CAUSE
+    # AI DIAGNOSIS
     # =====================================
 
     st.markdown(
@@ -584,6 +634,34 @@ AFFECTED PAYMENT ROUTE
     )
 
 
+    # -------------------------------------
+    # Run Gemini diagnosis
+    # -------------------------------------
+
+    with st.spinner(
+        "AI agent analyzing incident evidence..."
+    ):
+
+        try:
+
+            ai_diagnosis = diagnose_incident(
+                transactions,
+                incident
+            )
+
+        except Exception as e:
+
+            ai_diagnosis = None
+
+            st.warning(
+                f"AI diagnosis unavailable: {e}"
+            )
+
+
+    # -------------------------------------
+    # Deterministic root cause
+    # -------------------------------------
+
     root_cause = analyze_root_cause(
         transactions,
         incident
@@ -593,61 +671,113 @@ AFFECTED PAYMENT ROUTE
     col1, col2 = st.columns(2)
 
 
+    # =====================================
+    # AI PRIMARY DIAGNOSIS
+    # =====================================
+
     with col1:
 
         st.markdown(
             "### Primary Diagnosis"
         )
 
-        st.markdown(
-            f"#### {route}"
+        st.caption(
+            "Gemini analyzes incident evidence and provides an advisory diagnosis. "
+            "It does not authorize payment recovery."
         )
 
-        st.markdown(
-            f"""
-<div class="explanation-card">
 
-The agent identified
-<b>{route}</b>
-as the strongest degraded payment route
-during the incident window.
+        if ai_diagnosis:
+
+            ai_source = ai_diagnosis.get(
+                "source",
+                "unknown"
+            )
+
+
+            source_label = (
+                "🤖 Gemini AI"
+                if ai_source == "gemini"
+                else
+                "🛡️ Evidence-Based Fallback"
+            )
+
+
+            st.markdown(
+                f"""
+<div class="ai-card">
+
+<div class="ai-source">
+{source_label}
+</div>
+
+<h3>
+{ai_diagnosis['primary_diagnosis']}
+</h3>
 
 </div>
 """,
-            unsafe_allow_html=True
-        )
-
-
-        st.metric(
-            "AI Confidence",
-            f"{root_cause['confidence']}%"
-        )
-
-
-        c1, c2 = st.columns(2)
-
-
-        with c1:
-
-            st.metric(
-                "Route Failure",
-                f"{root_cause['route_failure_rate'] * 100:.2f}%"
+                unsafe_allow_html=True
             )
 
 
-        with c2:
+            c1, c2 = st.columns(2)
 
-            st.metric(
-                "Normal Failure",
-                f"{root_cause['baseline_failure_rate'] * 100:.2f}%"
+
+            with c1:
+
+                st.metric(
+                    "AI Confidence",
+                    f"{ai_diagnosis['confidence']:.0f}%"
+                )
+
+
+            with c2:
+
+                st.metric(
+                    "Severity",
+                    ai_diagnosis["severity"]
+                )
+
+
+            st.caption(
+                f"Diagnosis source: "
+                f"{ai_source}"
             )
 
+
+            st.markdown(
+                f"""
+<div class="explanation-card">
+
+The AI identified
+<b>{route}</b>
+as a route-specific degradation based on
+the observed transaction evidence.
+
+</div>
+""",
+                unsafe_allow_html=True
+            )
+
+
+        else:
+
+            st.warning(
+                "AI diagnosis is currently unavailable."
+            )
+
+
+    # =====================================
+    # DETERMINISTIC FAILURE ANALYSIS
+    # =====================================
 
     with col2:
 
         st.markdown(
             "### Failure Reasons"
         )
+
 
         error_analysis = root_cause[
             "error_analysis"
@@ -659,6 +789,7 @@ during the incident window.
             display_errors = (
                 error_analysis.copy()
             )
+
 
             display_errors[
                 "percentage"
@@ -697,11 +828,53 @@ during the incident window.
                 hide_index=True
             )
 
+
         else:
 
             st.info(
                 "No failure reason data available."
             )
+
+
+    # =====================================
+    # AI EVIDENCE
+    # =====================================
+
+    if ai_diagnosis:
+
+        st.markdown(
+            "### AI Evidence"
+        )
+
+
+        for evidence in ai_diagnosis[
+            "evidence"
+        ]:
+
+            st.markdown(
+                f"• {evidence}"
+            )
+
+
+        st.markdown(
+            "### Recommended Investigation"
+        )
+
+
+        for item in ai_diagnosis[
+            "recommended_investigation"
+        ]:
+
+            st.markdown(
+                f"• {item}"
+            )
+
+
+        st.caption(
+            "AI diagnosis is advisory. "
+            "Recovery authorization remains controlled "
+            "by the policy engine."
+        )
 
 
     # =====================================
@@ -760,9 +933,15 @@ during the incident window.
 
     st.markdown(
         '<div class="section-title">'
-        '⚡ AI Recovery Decision'
+        '⚡ Recovery Recommendation'
         '</div>',
         unsafe_allow_html=True
+    )
+
+    st.info(
+        "🤖 Gemini provides advisory incident diagnosis. "
+        "Recovery selection is performed by the deterministic recovery engine, "
+        "and authorization is enforced by the policy engine."
     )
 
 
@@ -854,6 +1033,11 @@ during the incident window.
             )
 
 
+        expected_improvement = (
+            recovery["alternative_success_rate"]
+            - incident["success_rate"]
+        ) * 100
+
         st.markdown(
             f"""
 <div class="explanation-card">
@@ -862,16 +1046,38 @@ during the incident window.
 
 <br><br>
 
-Historical comparable
+The recovery engine evaluated historical
 <b>{payment_method} + {device_type}</b>
-traffic shows a
-<b>
+traffic and identified
+<b>{recovery['alternative_bank']}</b>
+as the strongest eligible alternative.
+
+<br><br>
+
+<b>Current route:</b>
+{affected_bank}
+<br>
+
+<b>Alternative route:</b>
+{recovery['alternative_bank']}
+<br>
+
+<b>Current success rate:</b>
+{incident_success:.2f}%
+<br>
+
+<b>Historical alternative success rate:</b>
 {recovery['alternative_success_rate'] * 100:.2f}%
-</b>
-success rate, providing a stronger alternative
-to the degraded
-<b>{affected_bank}</b>
-route.
+<br>
+
+<b>Expected improvement:</b>
+{expected_improvement:.2f} percentage points
+
+<br><br>
+
+The recommendation is subject to all
+policy safety checks before any simulated
+recovery action is permitted.
 
 </div>
 """,
@@ -1281,6 +1487,18 @@ route.
     )
 
 
+    ai_diagnosis_text = (
+        (
+            f"{ai_diagnosis['severity']} severity "
+            f"diagnosis with "
+            f"{ai_diagnosis['confidence']:.0f}% confidence."
+        )
+        if ai_diagnosis
+        else
+        "AI diagnosis unavailable."
+    )
+
+
     steps = [
 
         (
@@ -1295,12 +1513,9 @@ route.
 
         (
             "2",
-            "🧠 DIAGNOSE",
-            "Root cause isolated",
-            (
-                f"{affected_bank} is the dominant "
-                f"degraded bank on this route."
-            )
+            "🤖 DIAGNOSE",
+            "AI diagnosis generated",
+            ai_diagnosis_text
         ),
 
         (
@@ -1636,31 +1851,56 @@ run_analysis = st.button(
 if run_analysis:
 
     with st.spinner(
-        "Running recovery analysis and recording audit event..."
+        "Checking audit history and running recovery analysis..."
     ):
 
         try:
 
-            execution_result = (
-                execute_batch_recovery()
-            )
+            existing_incident = False
+            current_audit = load_audit_log()
 
-            if execution_result is not None:
+            if (
+                current_audit is not None
+                and not current_audit.empty
+                and "incident_time" in current_audit.columns
+            ):
 
-                st.success(
-                    "Recovery analysis completed and "
-                    "audit event recorded."
+                audit_check = current_audit.copy()
+
+                audit_check["incident_time"] = pd.to_datetime(
+                    audit_check["incident_time"],
+                    errors="coerce"
                 )
 
-                # Force Streamlit to reload the
-                # newly written audit log.
-                st.rerun()
+                existing_incident = (
+                    audit_check["incident_time"] == incident_start
+                ).any()
+
+            if existing_incident:
+
+                st.info(
+                    "This incident is already present in the audit trail. "
+                    "No duplicate recovery event was created."
+                )
 
             else:
 
-                st.warning(
-                    "Recovery analysis could not be completed."
-                )
+                execution_result = execute_batch_recovery()
+
+                if execution_result is not None:
+
+                    st.success(
+                        "Recovery analysis completed and "
+                        "audit event recorded."
+                    )
+
+                else:
+
+                    st.warning(
+                        "Recovery analysis could not be completed."
+                    )
+
+            st.rerun()
 
         except Exception as e:
 
@@ -1854,7 +2094,9 @@ else:
     audit_display = audit_log.copy()
 
 
-    # Format timestamp
+    # -------------------------------------
+    # Timestamp
+    # -------------------------------------
 
     if "timestamp" in audit_display.columns:
 
@@ -1868,7 +2110,9 @@ else:
         )
 
 
-    # Create route
+    # -------------------------------------
+    # Route
+    # -------------------------------------
 
     if all(
         column in audit_display.columns
@@ -1896,7 +2140,9 @@ else:
         )
 
 
+    # -------------------------------------
     # Numeric formatting
+    # -------------------------------------
 
     numeric_columns = [
         "success_rate_before",
@@ -1919,9 +2165,9 @@ else:
             )
 
 
-    # =====================================
+    # -------------------------------------
     # DISPLAY TABLE
-    # =====================================
+    # -------------------------------------
 
     display_columns = [
         "timestamp",
