@@ -17,9 +17,47 @@ MIN_CONFIDENCE = 80.0
 
 MAX_RECOVERY_ATTEMPTS = 1
 
+# Additional production-safety thresholds
+MIN_RECOVERY_SUCCESS_RATE = 90.0
+
+MAX_ALLOWED_RECOVERY_FAILURE_RATE = 10.0
+
+ROLLBACK_DEGRADATION_PP = 5.0
+
+MAX_ROLLOUT_PERCENTAGE = 100
+
+STALE_EVIDENCE_HOURS = 2
+
 
 # =========================================
-# POLICY ENGINE
+# HELPER
+# =========================================
+
+def _result(
+    decision,
+    approved,
+    reason,
+    checks=None,
+    **extra
+):
+    """
+    Create a consistent policy result.
+    """
+
+    result = {
+        "decision": decision,
+        "approved": approved,
+        "reason": reason,
+        "checks": checks or []
+    }
+
+    result.update(extra)
+
+    return result
+
+
+# =========================================
+# MAIN RECOVERY POLICY
 # =========================================
 
 def evaluate_recovery_policy(
@@ -29,15 +67,17 @@ def evaluate_recovery_policy(
     recovery_attempts=0
 ):
     """
-    Evaluate whether a proposed recovery action
-    should be:
+    Deterministic safety layer between
+    AI diagnosis / recovery recommendation
+    and recovery execution.
+
+    Possible decisions:
 
         RECOVER
         STOP
         ESCALATE
 
-    This is a deterministic safety layer between
-    the recovery recommendation and execution.
+    AI does not directly authorize recovery.
     """
 
     # =====================================
@@ -46,22 +86,20 @@ def evaluate_recovery_policy(
 
     if incident is None:
 
-        return {
-            "decision": "STOP",
-            "approved": False,
-            "reason": "No active payment incident detected.",
-            "checks": []
-        }
+        return _result(
+            "STOP",
+            False,
+            "No active payment incident detected."
+        )
 
 
     if recovery is None:
 
-        return {
-            "decision": "STOP",
-            "approved": False,
-            "reason": "No recovery recommendation available.",
-            "checks": []
-        }
+        return _result(
+            "STOP",
+            False,
+            "No recovery recommendation available."
+        )
 
 
     checks = []
@@ -102,15 +140,15 @@ def evaluate_recovery_policy(
 
     if not volume_pass:
 
-        return {
-            "decision": "STOP",
-            "approved": False,
-            "reason": (
+        return _result(
+            "STOP",
+            False,
+            (
                 "Incident volume is too low "
                 "for automated recovery."
             ),
-            "checks": checks
-        }
+            checks
+        )
 
 
     # =====================================
@@ -148,15 +186,15 @@ def evaluate_recovery_policy(
 
     if not degradation_pass:
 
-        return {
-            "decision": "STOP",
-            "approved": False,
-            "reason": (
+        return _result(
+            "STOP",
+            False,
+            (
                 "Payment degradation is below "
                 "the automated recovery threshold."
             ),
-            "checks": checks
-        }
+            checks
+        )
 
 
     # =====================================
@@ -185,15 +223,17 @@ def evaluate_recovery_policy(
         })
 
 
-        return {
-            "decision": "ESCALATE",
-            "approved": False,
-            "reason": (
+        return _result(
+            "ESCALATE",
+            False,
+            (
                 "No suitable alternative "
-                "payment route was identified."
+                "payment route was identified. "
+                "Human review is required."
             ),
-            "checks": checks
-        }
+            checks,
+            human_review_required=True
+        )
 
 
     checks.append({
@@ -260,15 +300,55 @@ def evaluate_recovery_policy(
 
     if not improvement_pass:
 
-        return {
-            "decision": "STOP",
-            "approved": False,
-            "reason": (
+        return _result(
+            "STOP",
+            False,
+            (
                 "Alternative route does not provide "
                 "sufficient improvement."
             ),
-            "checks": checks
-        }
+            checks
+        )
+
+
+    # =====================================
+    # ALTERNATIVE SUCCESS RATE GUARDRAIL
+    # =====================================
+
+    alternative_quality_pass = (
+        alternative_success_rate * 100
+        >= MIN_RECOVERY_SUCCESS_RATE
+    )
+
+
+    checks.append({
+        "check":
+            "Alternative route quality",
+
+        "passed":
+            alternative_quality_pass,
+
+        "value":
+            alternative_success_rate * 100,
+
+        "threshold":
+            MIN_RECOVERY_SUCCESS_RATE
+    })
+
+
+    if not alternative_quality_pass:
+
+        return _result(
+            "ESCALATE",
+            False,
+            (
+                "Alternative route success rate is "
+                "below the minimum automated-recovery "
+                "quality threshold."
+            ),
+            checks,
+            human_review_required=True
+        )
 
 
     # =====================================
@@ -285,8 +365,6 @@ def evaluate_recovery_policy(
 
 
     if comparable_transactions is None:
-
-        # Try calculating it directly from data.
 
         try:
 
@@ -363,15 +441,17 @@ def evaluate_recovery_policy(
 
     if not history_pass:
 
-        return {
-            "decision": "ESCALATE",
-            "approved": False,
-            "reason": (
+        return _result(
+            "ESCALATE",
+            False,
+            (
                 "The alternative route does not "
-                "have sufficient historical evidence."
+                "have sufficient historical evidence. "
+                "Human review is required."
             ),
-            "checks": checks
-        }
+            checks,
+            human_review_required=True
+        )
 
 
     # =====================================
@@ -412,15 +492,17 @@ def evaluate_recovery_policy(
 
     if not confidence_pass:
 
-        return {
-            "decision": "ESCALATE",
-            "approved": False,
-            "reason": (
+        return _result(
+            "ESCALATE",
+            False,
+            (
                 "Agent confidence is below "
-                "the automated recovery threshold."
+                "the automated recovery threshold. "
+                "Human review is required."
             ),
-            "checks": checks
-        }
+            checks,
+            human_review_required=True
+        )
 
 
     # =====================================
@@ -450,50 +532,222 @@ def evaluate_recovery_policy(
 
     if not attempt_pass:
 
-        return {
-            "decision": "STOP",
-            "approved": False,
-            "reason": (
+        return _result(
+            "STOP",
+            False,
+            (
                 "Maximum recovery attempts "
-                "have already been reached."
+                "have already been reached. "
+                "Automated recovery is blocked."
             ),
-            "checks": checks
-        }
+            checks
+        )
 
 
     # =====================================
-    # ALL CHECKS PASSED
+    # ALL AUTOMATED RECOVERY CHECKS PASSED
     # =====================================
 
-    return {
-        "decision": "RECOVER",
-
-        "approved": True,
-
-        "reason": (
+    return _result(
+        "RECOVER",
+        True,
+        (
             f"Recovery approved: {alternative_bank} "
             f"provides a {improvement_pp:.2f} pp "
             f"success-rate improvement with "
             f"sufficient historical evidence."
         ),
+        checks,
+        alternative_bank=alternative_bank,
+        alternative_success_rate=alternative_success_rate,
+        improvement_pp=improvement_pp,
+        confidence=confidence,
+        comparable_transactions=comparable_transactions,
+        human_review_required=False,
+        max_rollout_percentage=MAX_ROLLOUT_PERCENTAGE
+    )
 
-        "alternative_bank":
-            alternative_bank,
 
-        "alternative_success_rate":
-            alternative_success_rate,
+# =========================================
+# ROLLBACK / CIRCUIT BREAKER
+# =========================================
 
-        "improvement_pp":
-            improvement_pp,
+def evaluate_recovery_guardrail(
+    baseline_success_rate,
+    recovery_success_rate,
+    rollout_percentage=100,
+    recovery_active=True
+):
+    """
+    Evaluate the health of an active recovery.
 
-        "confidence":
-            confidence,
+    This function is intentionally deterministic.
 
-        "comparable_transactions":
-            comparable_transactions,
+    Possible outcomes:
 
-        "checks":
-            checks
+        CONTINUE
+        STOP
+        ROLLBACK
+    """
+
+    baseline = float(
+        baseline_success_rate
+    )
+
+    current = float(
+        recovery_success_rate
+    )
+
+    rollout = float(
+        rollout_percentage
+    )
+
+
+    # -------------------------------------
+    # Recovery already inactive
+    # -------------------------------------
+
+    if not recovery_active:
+
+        return {
+            "decision":
+                "STOP",
+
+            "reason":
+                "Recovery is no longer active.",
+
+            "rollback_required":
+                False,
+
+            "healthy":
+                False
+        }
+
+
+    # -------------------------------------
+    # Invalid rollout
+    # -------------------------------------
+
+    if (
+        rollout < 0
+        or rollout > MAX_ROLLOUT_PERCENTAGE
+    ):
+
+        return {
+            "decision":
+                "STOP",
+
+            "reason":
+                "Invalid rollout percentage.",
+
+            "rollback_required":
+                True,
+
+            "healthy":
+                False
+        }
+
+
+    # -------------------------------------
+    # Recovery route deterioration
+    # -------------------------------------
+
+    deterioration_pp = (
+        baseline
+        - current
+    )
+
+
+    if deterioration_pp >= ROLLBACK_DEGRADATION_PP:
+
+        return {
+            "decision":
+                "ROLLBACK",
+
+            "reason":
+                (
+                    f"Recovery route degraded by "
+                    f"{deterioration_pp:.2f} pp "
+                    f"against the baseline guardrail."
+                ),
+
+            "rollback_required":
+                True,
+
+            "healthy":
+                False,
+
+            "baseline_success_rate":
+                baseline,
+
+            "recovery_success_rate":
+                current,
+
+            "deterioration_pp":
+                deterioration_pp
+        }
+
+
+    # -------------------------------------
+    # Recovery route below minimum quality
+    # -------------------------------------
+
+    if current < MIN_RECOVERY_SUCCESS_RATE:
+
+        return {
+            "decision":
+                "ROLLBACK",
+
+            "reason":
+                (
+                    f"Recovery route success rate "
+                    f"{current:.2f}% is below the "
+                    f"{MIN_RECOVERY_SUCCESS_RATE:.2f}% "
+                    f"minimum guardrail."
+                ),
+
+            "rollback_required":
+                True,
+
+            "healthy":
+                False,
+
+            "baseline_success_rate":
+                baseline,
+
+            "recovery_success_rate":
+                current
+        }
+
+
+    # -------------------------------------
+    # Healthy recovery
+    # -------------------------------------
+
+    return {
+        "decision":
+            "CONTINUE",
+
+        "reason":
+            (
+                "Recovery route remains within "
+                "configured performance guardrails."
+            ),
+
+        "rollback_required":
+            False,
+
+        "healthy":
+            True,
+
+        "baseline_success_rate":
+            baseline,
+
+        "recovery_success_rate":
+            current,
+
+        "deterioration_pp":
+            deterioration_pp
     }
 
 
@@ -508,33 +762,36 @@ def print_policy_result(policy_result):
     print("                 POLICY ENGINE")
     print("=" * 55)
 
-
     print(
         f"\nDecision: "
         f"{policy_result['decision']}"
     )
-
 
     print(
         f"Approved: "
         f"{policy_result['approved']}"
     )
 
-
     print(
-        f"\nReason:"
+        "\nReason:"
     )
-
 
     print(
         policy_result["reason"]
     )
 
+    if policy_result.get(
+        "human_review_required",
+        False
+    ):
+
+        print(
+            "\n⚠️ Human review required."
+        )
 
     print(
         "\nPolicy checks:"
     )
-
 
     for check in policy_result["checks"]:
 
@@ -545,19 +802,180 @@ def print_policy_result(policy_result):
             "FAIL"
         )
 
-
         print(
             f"  [{status}] "
             f"{check['check']}"
         )
-
 
     print("\n")
     print("=" * 55)
 
 
 # =========================================
-# STANDALONE TEST
+# SAFETY TESTS
+# =========================================
+
+def run_safety_tests():
+
+    print("\n")
+    print("=" * 55)
+    print("             SAFETY POLICY TESTS")
+    print("=" * 55)
+
+
+    # =====================================
+    # TEST DATA
+    # =====================================
+
+    base_incident = {
+        "transactions": 508,
+        "degradation_percentage_points": 24.93,
+        "success_rate": 0.6949,
+        "confidence": 90
+    }
+
+
+    base_recovery = {
+        "alternative_bank": "Bank_A",
+        "alternative_success_rate": 0.9581,
+        "historical_transactions": 6105,
+        "confidence": 90
+    }
+
+
+    # =====================================
+    # SCENARIO 1 — RECOVER
+    # =====================================
+
+    print(
+        "\n\nSCENARIO 1 — SAFE RECOVERY"
+    )
+
+
+    result = evaluate_recovery_policy(
+        None,
+        base_incident,
+        base_recovery
+    )
+
+
+    print_policy_result(
+        result
+    )
+
+
+    # =====================================
+    # SCENARIO 2 — ESCALATE
+    # =====================================
+
+    print(
+        "\n\nSCENARIO 2 — LOW AI CONFIDENCE"
+    )
+
+
+    escalation_recovery = {
+        **base_recovery,
+        "confidence": 65
+    }
+
+
+    result = evaluate_recovery_policy(
+        None,
+        base_incident,
+        escalation_recovery
+    )
+
+
+    print_policy_result(
+        result
+    )
+
+
+    # =====================================
+    # SCENARIO 3 — STOP
+    # =====================================
+
+    print(
+        "\n\nSCENARIO 3 — RECOVERY LIMIT"
+    )
+
+
+    result = evaluate_recovery_policy(
+        None,
+        base_incident,
+        base_recovery,
+        recovery_attempts=1
+    )
+
+
+    print_policy_result(
+        result
+    )
+
+
+    # =====================================
+    # SCENARIO 4 — CONTINUE
+    # =====================================
+
+    print(
+        "\n\nSCENARIO 4 — HEALTHY RECOVERY"
+    )
+
+
+    result = evaluate_recovery_guardrail(
+        baseline_success_rate=94.42,
+        recovery_success_rate=95.20,
+        rollout_percentage=25
+    )
+
+
+    print(
+        f"Decision: {result['decision']}"
+    )
+
+    print(
+        f"Reason: {result['reason']}"
+    )
+
+
+    # =====================================
+    # SCENARIO 5 — ROLLBACK
+    # =====================================
+
+    print(
+        "\n\nSCENARIO 5 — RECOVERY DEGRADATION"
+    )
+
+
+    result = evaluate_recovery_guardrail(
+        baseline_success_rate=94.42,
+        recovery_success_rate=87.00,
+        rollout_percentage=25
+    )
+
+
+    print(
+        f"Decision: {result['decision']}"
+    )
+
+    print(
+        f"Reason: {result['reason']}"
+    )
+
+    print(
+        f"Rollback required: "
+        f"{result['rollback_required']}"
+    )
+
+
+    print("\n")
+    print("=" * 55)
+    print("             SAFETY TESTS COMPLETE")
+    print("=" * 55)
+
+
+# =========================================
+# STANDALONE POLICY TEST
 # =========================================
 
 def run_policy_test():
@@ -569,12 +987,18 @@ def run_policy_test():
     )
 
 
-    print("\nLoading transaction data...")
+    print(
+        "\nLoading transaction data..."
+    )
+
 
     df = load_data()
 
 
-    print("Detecting incident...")
+    print(
+        "Detecting incident..."
+    )
+
 
     incident = detect_incident(
         df
@@ -590,7 +1014,10 @@ def run_policy_test():
         return
 
 
-    print("Generating recovery recommendation...")
+    print(
+        "Generating recovery recommendation..."
+    )
+
 
     recovery = recommend_recovery(
         df,
@@ -628,3 +1055,5 @@ def run_policy_test():
 if __name__ == "__main__":
 
     run_policy_test()
+
+    run_safety_tests()

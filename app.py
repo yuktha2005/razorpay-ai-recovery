@@ -37,7 +37,8 @@ from recovery_simulator import (
 )
 
 from policy_engine import (
-    evaluate_recovery_policy
+    evaluate_recovery_policy,
+    evaluate_recovery_guardrail
 )
 
 from batch_recovery import (
@@ -1477,6 +1478,19 @@ recovery action is permitted.
 
 
     # =====================================
+    # PERSISTENT BATCH RESULT
+    # =====================================
+
+    # Streamlit reruns the script after widget interactions.
+    # Initialize this before the decision trail because the
+    # trail displays the current guardrail state.
+    if "batch_result" not in st.session_state:
+        st.session_state["batch_result"] = None
+
+    batch_result = st.session_state["batch_result"]
+
+
+    # =====================================
     # AGENT DECISION TRAIL
     # =====================================
 
@@ -1575,6 +1589,26 @@ recovery action is permitted.
                 "Recovery strategy requires review "
                 "or was blocked."
             )
+        ),
+
+        (
+            "7",
+            "🛡️ GUARDRAIL",
+            "Recovery safety monitored",
+            (
+                f"Guardrail decision: "
+                f"{batch_result.get('guardrail_decision', 'PENDING')}."
+                if batch_result
+                else
+                "Recovery guardrail activates after the batch simulation."
+            )
+        ),
+
+        (
+            "8",
+            "📋 AUDIT",
+            "Recovery decision recorded",
+            "Policy decision, recovery outcome and safety state are persisted in the audit trail."
         )
     ]
 
@@ -1654,9 +1688,12 @@ recovery action is permitted.
                             batch_size=1000
                         )
 
+                        st.session_state["batch_result"] = batch_result
+
                     except Exception as e:
 
                         batch_result = None
+                        st.session_state["batch_result"] = None
 
                         st.error(
                             f"Batch recovery simulation failed: {e}"
@@ -1664,6 +1701,95 @@ recovery action is permitted.
 
 
                 if batch_result:
+                                        # =================================
+                    # RECOVERY SAFETY GUARDRAIL
+                    # =================================
+
+                    guardrail_decision = batch_result.get(
+                        "guardrail_decision",
+                        "NOT_RECORDED"
+                    )
+
+                    guardrail_reason = batch_result.get(
+                        "guardrail_reason",
+                        "No guardrail information available."
+                    )
+
+                    recovery_healthy = batch_result.get(
+                        "recovery_healthy",
+                        False
+                    )
+
+                    rollback_required = batch_result.get(
+                        "rollback_required",
+                        False
+                    )
+
+
+                    st.markdown(
+                        "### 🛡️ Recovery Safety Guardrail"
+                    )
+
+
+                    if guardrail_decision == "CONTINUE":
+
+                        st.success(
+                            f"🟢 **CONTINUE — Recovery healthy**\n\n"
+                            f"{guardrail_reason}"
+                        )
+
+                    elif guardrail_decision == "ROLLBACK":
+
+                        st.error(
+                            f"↩️ **ROLLBACK — Recovery guardrail breached**\n\n"
+                            f"{guardrail_reason}"
+                        )
+
+                    elif guardrail_decision == "STOP":
+
+                        st.error(
+                            f"🔴 **STOP — Recovery halted**\n\n"
+                            f"{guardrail_reason}"
+                        )
+
+                    else:
+
+                        st.info(
+                            f"Guardrail status: "
+                            f"{guardrail_decision}\n\n"
+                            f"{guardrail_reason}"
+                        )
+
+
+                    g1, g2, g3 = st.columns(3)
+
+
+                    with g1:
+
+                        st.metric(
+                            "Guardrail",
+                            guardrail_decision
+                        )
+
+
+                    with g2:
+
+                        st.metric(
+                            "Recovery Healthy",
+                            "YES"
+                            if recovery_healthy
+                            else "NO"
+                        )
+
+
+                    with g3:
+
+                        st.metric(
+                            "Rollback Required",
+                            "YES"
+                            if rollback_required
+                            else "NO"
+                        )
 
                     st.success(
                         "Approved recovery strategy simulated across the affected batch."
@@ -1836,7 +1962,62 @@ st.markdown(
     '</div>',
     unsafe_allow_html=True
 )
+# =========================================
+# SAFETY CONTROL CENTER
+# =========================================
 
+st.markdown(
+    '<div class="section-title">'
+    '🛡️ Agent Safety Controls'
+    '</div>',
+    unsafe_allow_html=True
+)
+
+safety_col1, safety_col2, safety_col3, safety_col4 = st.columns(4)
+
+with safety_col1:
+
+    st.markdown(
+        """
+        **🟢 RECOVER**
+
+        Automated recovery is permitted only
+        when deterministic policy checks pass.
+        """
+    )
+
+with safety_col2:
+
+    st.markdown(
+        """
+        **🟡 ESCALATE**
+
+        Low confidence or insufficient evidence
+        requires human review.
+        """
+    )
+
+with safety_col3:
+
+    st.markdown(
+        """
+        **🔴 STOP**
+
+        Recovery is blocked when safety limits
+        or recovery attempt limits are reached.
+        """
+    )
+
+with safety_col4:
+
+    st.markdown(
+        """
+        **↩️ ROLLBACK**
+
+        Active recovery can be reversed when
+        route performance breaches guardrails.
+        """
+    )
 
 st.caption(
     "Persistent history of bounded agent recovery decisions."

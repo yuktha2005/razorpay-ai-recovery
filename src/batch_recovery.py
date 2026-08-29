@@ -7,7 +7,8 @@ from agent import (
 )
 
 from policy_engine import (
-    evaluate_recovery_policy
+    evaluate_recovery_policy,
+    evaluate_recovery_guardrail
 )
 
 from audit_logger import (
@@ -299,6 +300,41 @@ def run_batch_recovery(
     )
 
     # =====================================
+    # RECOVERY GUARDRAIL
+    # =====================================
+
+    if policy_result["decision"] == "RECOVER":
+
+        guardrail_result = evaluate_recovery_guardrail(
+            baseline_success_rate=(
+                incident["baseline_success_rate"]
+                * 100
+                if incident.get("baseline_success_rate", 0) <= 1
+                else incident["baseline_success_rate"]
+            ),
+            recovery_success_rate=(
+                recovery["alternative_success_rate"]
+                * 100
+                if recovery["alternative_success_rate"] <= 1
+                else recovery["alternative_success_rate"]
+            ),
+            rollout_percentage=100,
+            recovery_active=True
+        )
+
+    else:
+
+        guardrail_result = {
+            "decision": "NOT_APPLICABLE",
+            "reason": (
+                "Recovery guardrail was not activated "
+                "because policy decision was "
+                f"{policy_result['decision']}."
+            ),
+            "rollback_required": False,
+            "healthy": False
+        }
+    # =====================================
     # RESULT
     # =====================================
 
@@ -380,7 +416,18 @@ def run_batch_recovery(
             policy_result["approved"],
 
         "policy_reason":
-            policy_result["reason"]
+            policy_result["reason"],
+                    "guardrail_decision":
+            guardrail_result["decision"],
+
+        "guardrail_reason":
+            guardrail_result["reason"],
+
+        "rollback_required":
+            guardrail_result["rollback_required"],
+
+        "recovery_healthy":
+            guardrail_result["healthy"],
     }
 
 
@@ -504,6 +551,30 @@ def print_batch_result(result):
     print(
         f"Recommended bank:"
         f" {result['alternative_bank']}"
+
+    )
+    print("\n----------------------------------------")
+    print("RECOVERY GUARDRAIL")
+    print("----------------------------------------")
+
+    print(
+        f"Guardrail decision:"
+        f" {result['guardrail_decision']}"
+    )
+
+    print(
+        f"Healthy:"
+        f" {result['recovery_healthy']}"
+    )
+
+    print(
+        f"Rollback required:"
+        f" {result['rollback_required']}"
+    )
+
+    print(
+        f"Reason:"
+        f" {result['guardrail_reason']}"
     )
 
     print("\n")
