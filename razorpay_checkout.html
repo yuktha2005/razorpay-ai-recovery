@@ -1,0 +1,922 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+
+    <meta
+        name="viewport"
+        content="width=device-width, initial-scale=1.0"
+    >
+
+    <title>AI Revenue Recovery — Razorpay Test</title>
+
+    <!-- Razorpay Checkout -->
+    <script src="https://checkout.razorpay.com/v1/checkout.js"></script>
+
+    <style>
+
+        * {
+            box-sizing: border-box;
+        }
+
+        body {
+            margin: 0;
+            min-height: 100vh;
+
+            display: flex;
+            align-items: center;
+            justify-content: center;
+
+            font-family:
+                Arial,
+                Helvetica,
+                sans-serif;
+
+            background: #f5f7fa;
+        }
+
+        .card {
+            width: 100%;
+            max-width: 520px;
+
+            background: white;
+
+            padding: 36px;
+
+            border-radius: 16px;
+
+            box-shadow:
+                0 8px 30px
+                rgba(0, 0, 0, 0.08);
+        }
+
+        .logo {
+            font-size: 30px;
+            margin-bottom: 8px;
+        }
+
+        h1 {
+            margin: 0;
+
+            font-size: 25px;
+        }
+
+        .subtitle {
+            color: #666;
+
+            margin-top: 8px;
+
+            line-height: 1.5;
+        }
+
+        .test-badge {
+            display: inline-block;
+
+            margin: 18px 0 24px;
+
+            padding: 6px 10px;
+
+            border-radius: 20px;
+
+            background: #fff3cd;
+
+            color: #856404;
+
+            font-size: 13px;
+
+            font-weight: bold;
+        }
+
+        label {
+            display: block;
+
+            margin-bottom: 8px;
+
+            font-weight: bold;
+        }
+
+        .amount-wrapper {
+            position: relative;
+        }
+
+        .currency {
+            position: absolute;
+
+            left: 14px;
+            top: 50%;
+
+            transform:
+                translateY(-50%);
+
+            font-size: 17px;
+
+            font-weight: bold;
+        }
+
+        input {
+            width: 100%;
+
+            padding:
+                14px
+                14px
+                14px
+                38px;
+
+            border:
+                1px solid #d5d9df;
+
+            border-radius: 9px;
+
+            font-size: 18px;
+
+            outline: none;
+        }
+
+        input:focus {
+            border-color: #555;
+        }
+
+        button {
+            width: 100%;
+
+            margin-top: 18px;
+
+            padding: 14px;
+
+            border: none;
+
+            border-radius: 9px;
+
+            background: #111;
+
+            color: white;
+
+            font-size: 16px;
+
+            font-weight: bold;
+
+            cursor: pointer;
+        }
+
+        button:hover {
+            opacity: 0.9;
+        }
+
+        button:disabled {
+            opacity: 0.5;
+
+            cursor: not-allowed;
+        }
+
+        .status {
+            margin-top: 20px;
+
+            padding: 15px;
+
+            border-radius: 9px;
+
+            background: #f1f3f5;
+
+            line-height: 1.6;
+
+            word-break: break-word;
+        }
+
+        .success {
+            background: #e8f7ee;
+        }
+
+        .error {
+            background: #fdeaea;
+        }
+
+        .info {
+            background: #eef3ff;
+        }
+
+        .footer {
+            margin-top: 25px;
+
+            text-align: center;
+
+            color: #777;
+
+            font-size: 12px;
+
+            line-height: 1.5;
+        }
+
+        .small {
+            color: #777;
+
+            font-size: 13px;
+
+            margin-top: 8px;
+        }
+
+    </style>
+
+</head>
+
+
+<body>
+
+    <div class="card">
+
+        <div class="logo">
+            💳
+        </div>
+
+        <h1>
+            AI Revenue Recovery
+        </h1>
+
+        <p class="subtitle">
+            Razorpay Test Mode payment demonstration
+        </p>
+
+        <div class="test-badge">
+            TEST MODE — NO REAL MONEY
+        </div>
+
+
+        <!-- =========================================
+             PAYMENT AMOUNT
+        ========================================== -->
+
+        <label for="amount">
+            Test Payment Amount
+        </label>
+
+        <div class="amount-wrapper">
+
+            <span class="currency">
+                ₹
+            </span>
+
+            <input
+                id="amount"
+                type="number"
+                value="500"
+                min="1"
+                max="100000"
+                step="1"
+                placeholder="Enter amount"
+            >
+
+        </div>
+
+        <div class="small">
+            Enter any amount between ₹1 and ₹100,000.
+        </div>
+
+
+        <!-- =========================================
+             PAYMENT BUTTON
+        ========================================== -->
+
+        <button
+            id="pay-button"
+            type="button"
+        >
+            Create Test Payment
+        </button>
+
+
+        <!-- =========================================
+             STATUS
+        ========================================== -->
+
+        <div
+            id="status"
+            class="status"
+        >
+            Ready to create a Razorpay test payment.
+        </div>
+
+
+        <div class="footer">
+            Razorpay Test Mode · No real-money transactions
+            or live payment routing.
+        </div>
+
+    </div>
+
+
+<script>
+
+
+/*
+=========================================================
+CONFIGURATION
+=========================================================
+*/
+
+/*
+IMPORTANT:
+Your FastAPI backend is running on PORT 8001.
+
+Previously this was 8000, which was incorrect.
+*/
+
+const BACKEND_URL =
+    "http://127.0.0.1:8001";
+
+
+/*
+=========================================================
+DOM ELEMENTS
+=========================================================
+*/
+
+const amountInput =
+    document.getElementById(
+        "amount"
+    );
+
+const payButton =
+    document.getElementById(
+        "pay-button"
+    );
+
+const statusBox =
+    document.getElementById(
+        "status"
+    );
+
+
+/*
+=========================================================
+STATUS HELPER
+=========================================================
+*/
+
+function setStatus(
+    message,
+    type = "info"
+) {
+
+    statusBox.innerHTML =
+        message;
+
+    statusBox.className =
+        "status " + type;
+
+}
+
+
+/*
+=========================================================
+CREATE PAYMENT
+=========================================================
+*/
+
+payButton.addEventListener(
+    "click",
+    async function () {
+
+        const amount =
+            Number(
+                amountInput.value
+            );
+
+
+        /*
+        ---------------------------------------------
+        VALIDATE AMOUNT
+        ---------------------------------------------
+        */
+
+        if (
+            !Number.isFinite(amount) ||
+            amount <= 0
+        ) {
+
+            setStatus(
+                "Please enter a valid amount greater than ₹0.",
+                "error"
+            );
+
+            return;
+
+        }
+
+
+        if (
+            amount > 100000
+        ) {
+
+            setStatus(
+                "Maximum demo amount is ₹100,000.",
+                "error"
+            );
+
+            return;
+
+        }
+
+
+        /*
+        ---------------------------------------------
+        DISABLE BUTTON
+        ---------------------------------------------
+        */
+
+        payButton.disabled =
+            true;
+
+        payButton.innerText =
+            "Creating Test Order...";
+
+
+        setStatus(
+            "Connecting to your Revenue Recovery backend...",
+            "info"
+        );
+
+
+        try {
+
+
+            /*
+            =========================================
+            STEP 1 — CREATE RAZORPAY ORDER
+            =========================================
+            */
+
+            const response =
+                await fetch(
+                    BACKEND_URL +
+                    "/create-order",
+                    {
+                        method: "POST",
+
+                        headers: {
+                            "Content-Type":
+                                "application/json"
+                        },
+
+                        body:
+                            JSON.stringify({
+                                amount_rupees:
+                                    amount
+                            })
+                    }
+                );
+
+
+            /*
+            -----------------------------------------
+            READ RESPONSE
+            -----------------------------------------
+            */
+
+            let data;
+
+            try {
+
+                data =
+                    await response.json();
+
+            }
+
+            catch {
+
+                throw new Error(
+                    "Backend returned an invalid response."
+                );
+
+            }
+
+
+            /*
+            -----------------------------------------
+            CHECK HTTP STATUS
+            -----------------------------------------
+            */
+
+            if (
+                !response.ok
+            ) {
+
+                throw new Error(
+                    data.detail ||
+                    "Unable to create Razorpay order."
+                );
+
+            }
+
+
+            /*
+            -----------------------------------------
+            VERIFY ORDER ID
+            -----------------------------------------
+            */
+
+            if (
+                !data.order_id
+            ) {
+
+                throw new Error(
+                    "Razorpay order ID was not returned."
+                );
+
+            }
+
+
+            /*
+            -----------------------------------------
+            VERIFY KEY ID
+            -----------------------------------------
+            */
+
+            if (
+                !data.key_id
+            ) {
+
+                throw new Error(
+                    "Razorpay Key ID was not returned."
+                );
+
+            }
+
+
+            console.log(
+                "Razorpay order created:",
+                data.order_id
+            );
+
+
+            /*
+            =========================================
+            STEP 2 — OPEN RAZORPAY CHECKOUT
+            =========================================
+            */
+
+            const options = {
+
+                key:
+                    data.key_id,
+
+                amount:
+                    data.amount,
+
+                currency:
+                    data.currency,
+
+                name:
+                    "AI Revenue Recovery",
+
+                description:
+                    "Revenue Recovery Test Payment",
+
+                order_id:
+                    data.order_id,
+
+
+                /*
+                =====================================
+                PAYMENT SUCCESS
+                =====================================
+                */
+
+                handler:
+                    async function (
+                        paymentResponse
+                    ) {
+
+                        setStatus(
+                            "Payment received. Verifying payment signature...",
+                            "info"
+                        );
+
+
+                        try {
+
+
+                            /*
+                            =============================
+                            STEP 3 — SERVER VERIFICATION
+                            =============================
+                            */
+
+                            const verifyResponse =
+                                await fetch(
+                                    BACKEND_URL +
+                                    "/verify-payment",
+                                    {
+                                        method: "POST",
+
+                                        headers: {
+                                            "Content-Type":
+                                                "application/json"
+                                        },
+
+                                        body:
+                                            JSON.stringify({
+
+                                                razorpay_order_id:
+                                                    paymentResponse
+                                                        .razorpay_order_id,
+
+                                                razorpay_payment_id:
+                                                    paymentResponse
+                                                        .razorpay_payment_id,
+
+                                                razorpay_signature:
+                                                    paymentResponse
+                                                        .razorpay_signature
+
+                                            })
+                                    }
+                                );
+
+
+                            /*
+                            -----------------------------
+                            READ VERIFICATION RESPONSE
+                            -----------------------------
+                            */
+
+                            let result;
+
+                            try {
+
+                                result =
+                                    await verifyResponse.json();
+
+                            }
+
+                            catch {
+
+                                throw new Error(
+                                    "Verification server returned an invalid response."
+                                );
+
+                            }
+
+
+                            /*
+                            -----------------------------
+                            CHECK VERIFICATION
+                            -----------------------------
+                            */
+
+                            if (
+                                !verifyResponse.ok
+                            ) {
+
+                                throw new Error(
+                                    result.detail ||
+                                    "Payment verification failed."
+                                );
+
+                            }
+
+
+                            /*
+                            =============================
+                            PAYMENT VERIFIED
+                            =============================
+                            */
+
+                            const verifiedAmount =
+                                (
+                                    Number(
+                                        result.amount
+                                    ) / 100
+                                ).toFixed(2);
+
+
+                            setStatus(
+                                `
+                                <strong>
+                                    ✅ Payment Verified Successfully
+                                </strong>
+
+                                <br><br>
+
+                                <strong>
+                                    Order ID:
+                                </strong>
+
+                                ${result.order_id}
+
+                                <br>
+
+                                <strong>
+                                    Payment ID:
+                                </strong>
+
+                                ${result.payment_id}
+
+                                <br>
+
+                                <strong>
+                                    Amount:
+                                </strong>
+
+                                ₹${verifiedAmount}
+
+                                <br>
+
+                                <strong>
+                                    Method:
+                                </strong>
+
+                                ${result.method || "Test"}
+
+                                <br>
+
+                                <strong>
+                                    Status:
+                                </strong>
+
+                                ${result.status}
+
+                                <br><br>
+
+                                Payment has been verified by the backend.
+                                `,
+                                "success"
+                            );
+
+
+                            console.log(
+                                "Verified payment:",
+                                result
+                            );
+
+
+                        }
+
+                        catch (
+                            error
+                        ) {
+
+                            console.error(
+                                "Verification error:",
+                                error
+                            );
+
+
+                            setStatus(
+                                `
+                                <strong>
+                                    ❌ Verification Failed
+                                </strong>
+
+                                <br><br>
+
+                                ${error.message}
+                                `,
+                                "error"
+                            );
+
+                        }
+
+
+                        payButton.disabled =
+                            false;
+
+                        payButton.innerText =
+                            "Create Another Test Payment";
+
+                    },
+
+
+                /*
+                =====================================
+                CHECKOUT CLOSED
+                =====================================
+                */
+
+                modal: {
+
+                    ondismiss:
+                        function () {
+
+                            setStatus(
+                                "Razorpay Checkout was closed. No payment was completed.",
+                                "info"
+                            );
+
+
+                            payButton.disabled =
+                                false;
+
+
+                            payButton.innerText =
+                                "Create Test Payment";
+
+                        }
+
+                }
+
+            };
+
+
+            /*
+            =========================================
+            CHECK RAZORPAY LIBRARY
+            =========================================
+            */
+
+            if (
+                typeof Razorpay ===
+                "undefined"
+            ) {
+
+                throw new Error(
+                    "Razorpay Checkout library did not load. Check your internet connection."
+                );
+
+            }
+
+
+            /*
+            =========================================
+            CREATE RAZORPAY INSTANCE
+            =========================================
+            */
+
+            const razorpay =
+                new Razorpay(
+                    options
+                );
+
+
+            /*
+            =========================================
+            OPEN CHECKOUT
+            =========================================
+            */
+
+            setStatus(
+                `
+                Razorpay Test Checkout is opening...
+
+                <br><br>
+
+                <strong>
+                    Amount:
+                </strong>
+
+                ₹${amount.toFixed(2)}
+                `,
+                "info"
+            );
+
+
+            razorpay.open();
+
+
+        }
+
+        catch (
+            error
+        ) {
+
+            console.error(
+                "Payment error:",
+                error
+            );
+
+
+            setStatus(
+                `
+                <strong>
+                    ❌ Unable to start payment
+                </strong>
+
+                <br><br>
+
+                ${error.message}
+
+                <br><br>
+
+                Make sure the FastAPI server is running
+                on port 8001.
+                `,
+                "error"
+            );
+
+
+            payButton.disabled =
+                false;
+
+
+            payButton.innerText =
+                "Create Test Payment";
+
+        }
+
+    }
+);
+
+</script>
+
+</body>
+
+</html>

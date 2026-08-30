@@ -50,6 +50,13 @@ from audit_logger import (
     load_audit_log
 )
 
+from scenario_engine import (
+    list_scenarios,
+    get_scenario,
+    scenario_summary,
+    evaluate_scenario_control
+)
+
 
 # =========================================
 # PAGE CONFIGURATION
@@ -373,12 +380,97 @@ with col4:
 
 
 # =========================================
+# CONTROLLED INCIDENT SCENARIO SIMULATOR
+# =========================================
+
+st.markdown(
+    '<div class="section-title">'
+    '🎛️ Incident Scenario Simulator'
+    '</div>',
+    unsafe_allow_html=True
+)
+
+scenario_name = st.selectbox(
+    "Controlled incident scenario",
+    list_scenarios(),
+    index=0,
+    help=(
+        "Counterfactual demo scenarios used to validate "
+        "bounded recovery behavior. No live payment routing."
+    )
+)
+
+selected_scenario = get_scenario(scenario_name)
+scenario_view = scenario_summary(scenario_name)
+scenario_control = evaluate_scenario_control(scenario_name)
+
+sc1, sc2, sc3, sc4 = st.columns(4)
+
+with sc1:
+    st.metric(
+        "Scenario Success",
+        f"{scenario_view['current_success_rate'] * 100:.2f}%"
+    )
+
+with sc2:
+    st.metric(
+        "Baseline",
+        f"{scenario_view['baseline_success_rate'] * 100:.2f}%"
+    )
+
+with sc3:
+    st.metric(
+        "AI Confidence",
+        f"{scenario_view['ai_confidence'] * 100:.0f}%"
+    )
+
+with sc4:
+    st.metric(
+        "Expected Control",
+        scenario_view["expected_control"]
+    )
+
+st.caption(
+    f"{scenario_view['description']} "
+    "Scenario values are counterfactual and do not route real payments."
+)
+
+
+# =========================================
 # DETECT INCIDENT
 # =========================================
 
 incident = detect_incident(
     transactions
 )
+
+
+# =====================================
+# SCENARIO CONTROL OVERLAY
+# =====================================
+
+# The real detector remains the source of incident evidence.
+# Scenario controls are surfaced as a demonstration/validation layer.
+if scenario_control["decision"] == "ESCALATE":
+    st.warning(
+        "🟡 Scenario safety control: automated recovery is intentionally "
+        "held for human review because AI confidence is below threshold."
+    )
+elif scenario_control["guardrail"] == "ROLLBACK":
+    st.error(
+        "↩️ Scenario safety control: recovery is expected to trigger "
+        "rollback if the simulated alternative breaches its guardrail."
+    )
+elif scenario_control["decision"] == "STOP":
+    st.info(
+        "🔴 Scenario safety control: recovery is intentionally blocked "
+        "because the simulated degradation is below the recovery threshold."
+    )
+elif scenario_control["decision"] == "CONTINUE":
+    st.success(
+        "🟢 Scenario safety control: route remains within configured "
+        "performance guardrails."
+    )
 
 
 if incident is None:
@@ -1948,6 +2040,23 @@ These are counterfactual simulation results, not real payment outcomes.
                 "policy engine blocked automated recovery."
             )
 
+
+# =========================================
+# SCENARIO VALIDATION SUMMARY
+# =========================================
+
+with st.expander("🧪 Scenario validation details"):
+    st.write(
+        {
+            "scenario": scenario_name,
+            "severity": scenario_control["severity"],
+            "ai_confidence": f"{scenario_control['confidence'] * 100:.0f}%",
+            "expected_control": scenario_control["decision"],
+            "guardrail": scenario_control["guardrail"],
+            "human_review_required": scenario_control["human_review_required"],
+            "rollback_required": scenario_control["rollback_required"],
+        }
+    )
 
 # =========================================
 # AUDIT TRAIL

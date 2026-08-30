@@ -1,0 +1,2035 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+
+    <meta
+        name="viewport"
+        content="width=device-width, initial-scale=1.0"
+    >
+
+    <title>AI Revenue Recovery Dashboard</title>
+
+    <style>
+
+        * {
+            box-sizing: border-box;
+        }
+
+        body {
+            margin: 0;
+
+            font-family:
+                Inter,
+                system-ui,
+                -apple-system,
+                BlinkMacSystemFont,
+                "Segoe UI",
+                sans-serif;
+
+            background: #0b0f14;
+            color: #f5f7fa;
+        }
+
+        .container {
+            width: min(1400px, 94%);
+            margin: 0 auto;
+            padding: 32px 0 60px;
+        }
+
+
+        /* =================================================
+           HEADER
+           ================================================= */
+
+        .header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+
+            gap: 20px;
+            margin-bottom: 32px;
+        }
+
+        .title-area h1 {
+            margin: 0;
+
+            font-size: 30px;
+            font-weight: 700;
+        }
+
+        .title-area p {
+            margin: 8px 0 0;
+
+            color: #8f9baa;
+            font-size: 14px;
+        }
+
+        .status {
+            display: flex;
+            align-items: center;
+
+            gap: 8px;
+
+            padding: 9px 14px;
+
+            border: 1px solid #26313d;
+            border-radius: 999px;
+
+            color: #9ee6b1;
+            background: #111820;
+
+            font-size: 13px;
+        }
+
+        .status-dot {
+            width: 8px;
+            height: 8px;
+
+            border-radius: 50%;
+
+            background: #56d364;
+        }
+
+        .status-dot.offline {
+            background: #ff6b6b;
+        }
+
+
+        /* =================================================
+           METRIC CARDS
+           ================================================= */
+
+        .metrics {
+            display: grid;
+
+            grid-template-columns:
+                repeat(4, 1fr);
+
+            gap: 16px;
+
+            margin-bottom: 24px;
+        }
+
+        .metric-card {
+            padding: 22px;
+
+            background: #11161d;
+
+            border:
+                1px solid #202a35;
+
+            border-radius: 14px;
+        }
+
+        .metric-label {
+            color: #8f9baa;
+
+            font-size: 13px;
+
+            margin-bottom: 12px;
+        }
+
+        .metric-value {
+            font-size: 28px;
+
+            font-weight: 700;
+        }
+
+        .metric-sub {
+            margin-top: 7px;
+
+            color: #687482;
+
+            font-size: 12px;
+        }
+
+
+        /* =================================================
+           MAIN GRID
+           ================================================= */
+
+        .main-grid {
+            display: grid;
+
+            grid-template-columns:
+                1.7fr 1fr;
+
+            gap: 20px;
+        }
+
+        .panel {
+            background: #11161d;
+
+            border:
+                1px solid #202a35;
+
+            border-radius: 14px;
+
+            overflow: hidden;
+        }
+
+        .panel-header {
+            padding: 20px;
+
+            border-bottom:
+                1px solid #202a35;
+
+            display: flex;
+
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .panel-header h2 {
+            margin: 0;
+
+            font-size: 17px;
+        }
+
+        .panel-header span {
+            color: #687482;
+
+            font-size: 12px;
+        }
+
+
+        /* =================================================
+           TABLE
+           ================================================= */
+
+        .table-wrapper {
+            overflow-x: auto;
+        }
+
+        table {
+            width: 100%;
+
+            border-collapse: collapse;
+        }
+
+        th {
+            padding: 13px 16px;
+
+            text-align: left;
+
+            color: #687482;
+
+            font-size: 11px;
+
+            font-weight: 600;
+
+            text-transform: uppercase;
+        }
+
+        td {
+            padding: 15px 16px;
+
+            border-top:
+                1px solid #1b242e;
+
+            font-size: 13px;
+        }
+
+        tr:hover {
+            background: #151b23;
+        }
+
+        .payment-id {
+            font-family: monospace;
+
+            color: #c7d0da;
+        }
+
+
+        /* =================================================
+           BADGES
+           ================================================= */
+
+        .badge {
+            display: inline-flex;
+
+            padding: 5px 9px;
+
+            border-radius: 999px;
+
+            font-size: 11px;
+
+            font-weight: 600;
+        }
+
+        .badge-medium {
+            background: #332b16;
+
+            color: #f1cc74;
+        }
+
+        .badge-high {
+            background: #351b1b;
+
+            color: #ff9b9b;
+        }
+
+        .badge-low {
+            background: #172d20;
+
+            color: #8fdda4;
+        }
+
+        .badge-recovered {
+            background: #172d20;
+
+            color: #8fdda4;
+        }
+
+        .badge-attempted {
+            background: #332b16;
+
+            color: #f1cc74;
+        }
+
+        .badge-failed {
+            background: #351b1b;
+
+            color: #ff9b9b;
+        }
+
+        .badge-open {
+            background: #202832;
+
+            color: #aeb9c5;
+        }
+
+
+        /* =================================================
+           AI PANEL
+           ================================================= */
+
+        .ai-panel {
+            padding: 22px;
+        }
+
+        .ai-title {
+            display: flex;
+
+            justify-content: space-between;
+            align-items: center;
+
+            margin-bottom: 20px;
+        }
+
+        .ai-title h3 {
+            margin: 0;
+
+            font-size: 16px;
+        }
+
+        .ai-label {
+            color: #8f9baa;
+
+            font-size: 11px;
+
+            text-transform: uppercase;
+        }
+
+        .decision-box {
+            padding: 18px;
+
+            background: #0d1218;
+
+            border:
+                1px solid #202a35;
+
+            border-radius: 10px;
+
+            margin-bottom: 14px;
+        }
+
+        .decision-label {
+            color: #687482;
+
+            font-size: 11px;
+
+            margin-bottom: 7px;
+        }
+
+        .decision-value {
+            font-size: 18px;
+
+            font-weight: 650;
+        }
+
+        .decision-description {
+            margin-top: 8px;
+
+            color: #8f9baa;
+
+            font-size: 12px;
+
+            line-height: 1.5;
+        }
+
+
+        /* =================================================
+           AI STATUS
+           ================================================= */
+
+        .decision-success {
+            color: #8fdda4;
+        }
+
+        .decision-warning {
+            color: #f1cc74;
+        }
+
+        .decision-danger {
+            color: #ff9b9b;
+        }
+
+
+        /* =================================================
+           FLOW
+           ================================================= */
+
+        .flow {
+            margin-top: 20px;
+        }
+
+        .flow-title {
+            margin-bottom: 14px;
+
+            color: #687482;
+
+            font-size: 11px;
+
+            text-transform: uppercase;
+        }
+
+        .flow-item {
+            display: flex;
+
+            align-items: center;
+
+            gap: 12px;
+
+            margin-bottom: 12px;
+        }
+
+        .flow-number {
+            width: 25px;
+            height: 25px;
+
+            display: flex;
+
+            align-items: center;
+            justify-content: center;
+
+            flex-shrink: 0;
+
+            border-radius: 50%;
+
+            background: #202832;
+
+            color: #c7d0da;
+
+            font-size: 11px;
+        }
+
+        .flow-text {
+            font-size: 13px;
+
+            color: #b8c1cb;
+        }
+
+
+        /* =================================================
+           REFRESH
+           ================================================= */
+
+        .refresh-button {
+            cursor: pointer;
+
+            padding: 8px 13px;
+
+            background: #171e27;
+
+            color: #d6dde5;
+
+            border:
+                1px solid #293440;
+
+            border-radius: 8px;
+
+            font-size: 12px;
+        }
+
+        .refresh-button:hover {
+            background: #202832;
+        }
+
+        .refresh-button:disabled {
+            cursor: not-allowed;
+
+            opacity: 0.5;
+        }
+
+        .last-updated {
+            margin-top: 16px;
+
+            color: #687482;
+
+            font-size: 11px;
+
+            text-align: right;
+        }
+
+
+        /* =================================================
+           EMPTY / ERROR
+           ================================================= */
+
+        .message {
+            padding: 30px;
+
+            text-align: center;
+
+            color: #687482;
+        }
+
+
+        /* =================================================
+           RESPONSIVE
+           ================================================= */
+
+        @media (max-width: 1000px) {
+
+            .metrics {
+                grid-template-columns:
+                    repeat(2, 1fr);
+            }
+
+            .main-grid {
+                grid-template-columns: 1fr;
+            }
+
+        }
+
+
+        @media (max-width: 600px) {
+
+            .metrics {
+                grid-template-columns: 1fr;
+            }
+
+            .header {
+                align-items: flex-start;
+
+                flex-direction: column;
+            }
+
+            .container {
+                width: 92%;
+            }
+
+        }
+
+    </style>
+
+</head>
+
+
+<body>
+
+<div class="container">
+
+
+    <!-- =================================================
+         HEADER
+         ================================================= -->
+
+    <header class="header">
+
+        <div class="title-area">
+
+            <h1>
+                AI Revenue Recovery
+            </h1>
+
+            <p>
+                Intelligent payment failure detection,
+                recovery and safety control
+            </p>
+
+        </div>
+
+
+        <div
+            class="status"
+            id="backendStatus"
+        >
+
+            <span
+                class="status-dot"
+                id="statusDot"
+            ></span>
+
+            <span id="statusText">
+                Checking backend...
+            </span>
+
+        </div>
+
+    </header>
+
+
+
+    <!-- =================================================
+         PRIMARY METRICS
+         ================================================= -->
+
+    <section class="metrics">
+
+
+        <!-- Revenue at Risk -->
+
+        <div class="metric-card">
+
+            <div class="metric-label">
+                Revenue at Risk
+            </div>
+
+            <div
+                class="metric-value"
+                id="revenueRisk"
+            >
+                ₹0.00
+            </div>
+
+            <div class="metric-sub">
+                Failed payment value
+            </div>
+
+        </div>
+
+
+
+        <!-- Recovered Revenue -->
+
+        <div class="metric-card">
+
+            <div class="metric-label">
+                Recovered Revenue
+            </div>
+
+            <div
+                class="metric-value"
+                id="recoveredRevenue"
+            >
+                ₹0.00
+            </div>
+
+            <div class="metric-sub">
+                Successfully recovered
+            </div>
+
+        </div>
+
+
+
+        <!-- Recovery Rate -->
+
+        <div class="metric-card">
+
+            <div class="metric-label">
+                Recovery Rate
+            </div>
+
+            <div
+                class="metric-value"
+                id="recoveryRate"
+            >
+                0.00%
+            </div>
+
+            <div class="metric-sub">
+                Revenue recovery performance
+            </div>
+
+        </div>
+
+
+
+        <!-- Recovery Attempts -->
+
+        <div class="metric-card">
+
+            <div class="metric-label">
+                Recovery Attempts
+            </div>
+
+            <div
+                class="metric-value"
+                id="attempts"
+            >
+                0
+            </div>
+
+            <div class="metric-sub">
+                Actions initiated
+            </div>
+
+        </div>
+
+    </section>
+
+
+
+    <!-- =================================================
+         SECONDARY METRICS
+         ================================================= -->
+
+    <section class="metrics">
+
+
+        <!-- Total Cases -->
+
+        <div class="metric-card">
+
+            <div class="metric-label">
+                Total Cases
+            </div>
+
+            <div
+                class="metric-value"
+                id="totalCases"
+            >
+                0
+            </div>
+
+            <div class="metric-sub">
+                Recovery cases created
+            </div>
+
+        </div>
+
+
+
+        <!-- Successful -->
+
+        <div class="metric-card">
+
+            <div class="metric-label">
+                Successful
+            </div>
+
+            <div
+                class="metric-value"
+                id="successful"
+            >
+                0
+            </div>
+
+            <div class="metric-sub">
+                Successfully recovered
+            </div>
+
+        </div>
+
+
+
+        <!-- Failed -->
+
+        <div class="metric-card">
+
+            <div class="metric-label">
+                Failed
+            </div>
+
+            <div
+                class="metric-value"
+                id="failed"
+            >
+                0
+            </div>
+
+            <div class="metric-sub">
+                Recovery attempts failed
+            </div>
+
+        </div>
+
+
+
+        <!-- Escalated -->
+
+        <div class="metric-card">
+
+            <div class="metric-label">
+                Escalated
+            </div>
+
+            <div
+                class="metric-value"
+                id="escalated"
+            >
+                0
+            </div>
+
+            <div class="metric-sub">
+                Cases requiring review
+            </div>
+
+        </div>
+
+    </section>
+
+
+
+    <!-- =================================================
+         MAIN CONTENT
+         ================================================= -->
+
+    <section class="main-grid">
+
+
+        <!-- =================================================
+             RECOVERY CASES
+             ================================================= -->
+
+        <div class="panel">
+
+            <div class="panel-header">
+
+                <h2>
+                    Recovery Cases
+                </h2>
+
+                <button
+                    class="refresh-button"
+                    id="refreshButton"
+                    onclick="loadDashboard()"
+                >
+                    Refresh
+                </button>
+
+            </div>
+
+
+            <div class="table-wrapper">
+
+                <table>
+
+                    <thead>
+
+                        <tr>
+
+                            <th>
+                                Payment
+                            </th>
+
+                            <th>
+                                Amount
+                            </th>
+
+                            <th>
+                                Risk
+                            </th>
+
+                            <th>
+                                Action
+                            </th>
+
+                            <th>
+                                Status
+                            </th>
+
+                            <th>
+                                Recovered
+                            </th>
+
+                        </tr>
+
+                    </thead>
+
+
+                    <tbody id="casesTable">
+
+                        <tr>
+
+                            <td
+                                colspan="6"
+                                class="message"
+                            >
+                                Loading cases...
+                            </td>
+
+                        </tr>
+
+                    </tbody>
+
+                </table>
+
+            </div>
+
+        </div>
+
+
+
+        <!-- =================================================
+             AI DECISION PANEL
+             ================================================= -->
+
+        <div class="panel">
+
+            <div class="panel-header">
+
+                <h2>
+                    AI Decision Flow
+                </h2>
+
+                <span>
+                    Safety-first
+                </span>
+
+            </div>
+
+
+            <div class="ai-panel">
+
+
+                <div class="ai-title">
+
+                    <h3>
+                        Recovery Pipeline
+                    </h3>
+
+                    <span class="ai-label">
+                        Automated
+                    </span>
+
+                </div>
+
+
+
+                <!-- Failure Classification -->
+
+                <div class="decision-box">
+
+                    <div class="decision-label">
+                        Failure Classification
+                    </div>
+
+                    <div
+                        class="decision-value"
+                        id="failureCategory"
+                    >
+                        —
+                    </div>
+
+                </div>
+
+
+
+                <!-- Risk Assessment -->
+
+                <div class="decision-box">
+
+                    <div class="decision-label">
+                        Risk Assessment
+                    </div>
+
+                    <div
+                        class="decision-value"
+                        id="riskScore"
+                    >
+                        —
+                    </div>
+
+                    <div
+                        class="metric-sub"
+                        id="riskLevel"
+                    >
+                        Risk Level: —
+                    </div>
+
+                </div>
+
+
+
+                <!-- Recommended Action -->
+
+                <div class="decision-box">
+
+                    <div class="decision-label">
+                        Recommended Action
+                    </div>
+
+                    <div
+                        class="decision-value"
+                        id="recommendedAction"
+                    >
+                        —
+                    </div>
+
+                </div>
+
+
+
+                <!-- AI Confidence -->
+
+                <div class="decision-box">
+
+                    <div class="decision-label">
+                        AI Confidence
+                    </div>
+
+                    <div
+                        class="decision-value"
+                        id="aiConfidence"
+                    >
+                        —
+                    </div>
+
+                </div>
+
+
+
+                <!-- Safety Decision -->
+
+                <div class="decision-box">
+
+                    <div class="decision-label">
+                        Safety Decision
+                    </div>
+
+                    <div
+                        class="decision-value"
+                        id="safetyDecision"
+                    >
+                        —
+                    </div>
+
+                    <div
+                        class="decision-description"
+                        id="safetyReason"
+                    >
+                        —
+                    </div>
+
+                </div>
+
+
+
+                <!-- Execution -->
+
+                <div class="decision-box">
+
+                    <div class="decision-label">
+                        Execution
+                    </div>
+
+                    <div
+                        class="decision-value"
+                        id="executionAllowed"
+                    >
+                        —
+                    </div>
+
+                </div>
+
+
+
+                <!-- AI Reason -->
+
+                <div class="decision-box">
+
+                    <div class="decision-label">
+                        AI Reason
+                    </div>
+
+                    <div
+                        class="flow-text"
+                        id="aiReason"
+                    >
+                        —
+                    </div>
+
+                </div>
+
+
+
+                <!-- =================================================
+                     PIPELINE
+                     ================================================= -->
+
+                <div class="flow">
+
+                    <div class="flow-title">
+                        Recovery Pipeline
+                    </div>
+
+
+                    <div class="flow-item">
+
+                        <div class="flow-number">
+                            1
+                        </div>
+
+                        <div class="flow-text">
+                            Payment failure detected
+                        </div>
+
+                    </div>
+
+
+                    <div class="flow-item">
+
+                        <div class="flow-number">
+                            2
+                        </div>
+
+                        <div class="flow-text">
+                            Revenue risk assessed
+                        </div>
+
+                    </div>
+
+
+                    <div class="flow-item">
+
+                        <div class="flow-number">
+                            3
+                        </div>
+
+                        <div class="flow-text">
+                            AI recovery action proposed
+                        </div>
+
+                    </div>
+
+
+                    <div class="flow-item">
+
+                        <div class="flow-number">
+                            4
+                        </div>
+
+                        <div class="flow-text">
+                            Safety controls evaluated
+                        </div>
+
+                    </div>
+
+
+                    <div class="flow-item">
+
+                        <div class="flow-number">
+                            5
+                        </div>
+
+                        <div class="flow-text">
+                            Recovery attempt executed
+                        </div>
+
+                    </div>
+
+
+                    <div class="flow-item">
+
+                        <div class="flow-number">
+                            6
+                        </div>
+
+                        <div class="flow-text">
+                            Payment outcome tracked
+                        </div>
+
+                    </div>
+
+                </div>
+
+            </div>
+
+        </div>
+
+    </section>
+
+
+
+    <!-- =================================================
+         LAST UPDATED
+         ================================================= -->
+
+    <div
+        class="last-updated"
+        id="lastUpdated"
+    >
+        Last updated: —
+    </div>
+
+</div>
+
+
+
+<script>
+
+
+    /* =====================================================
+       API CONFIGURATION
+       ===================================================== */
+
+    const API_BASE =
+        "http://127.0.0.1:8001";
+
+
+
+    /* =====================================================
+       FORMAT RUPEES
+       ===================================================== */
+
+    function formatRupees(value) {
+
+        return "₹" + Number(
+            value || 0
+        ).toLocaleString(
+            "en-IN",
+            {
+                minimumFractionDigits: 2,
+                maximumFractionDigits: 2
+            }
+        );
+
+    }
+
+
+
+    /* =====================================================
+       HTML ESCAPE
+       ===================================================== */
+
+    function escapeHtml(value) {
+
+        return String(
+            value ?? ""
+        )
+        .replace(
+            /&/g,
+            "&amp;"
+        )
+        .replace(
+            /</g,
+            "&lt;"
+        )
+        .replace(
+            />/g,
+            "&gt;"
+        )
+        .replace(
+            /"/g,
+            "&quot;"
+        )
+        .replace(
+            /'/g,
+            "&#039;"
+        );
+
+    }
+
+
+
+    /* =====================================================
+       STATUS BADGE
+       ===================================================== */
+
+    function statusBadge(status) {
+
+        const normalized =
+            String(
+                status || ""
+            ).toUpperCase();
+
+
+        let className =
+            "badge badge-open";
+
+
+        if (
+            normalized ===
+            "RECOVERED"
+        ) {
+
+            className =
+                "badge badge-recovered";
+
+        }
+
+        else if (
+            normalized ===
+            "RECOVERY_ATTEMPTED"
+        ) {
+
+            className =
+                "badge badge-attempted";
+
+        }
+
+        else if (
+            normalized ===
+            "FAILED"
+        ) {
+
+            className =
+                "badge badge-failed";
+
+        }
+
+
+        return `
+            <span class="${className}">
+                ${escapeHtml(normalized || "OPEN")}
+            </span>
+        `;
+
+    }
+
+
+
+    /* =====================================================
+       RISK BADGE
+       ===================================================== */
+
+    function riskBadge(level) {
+
+        const normalized =
+            String(
+                level || ""
+            ).toUpperCase();
+
+
+        let className =
+            "badge badge-open";
+
+
+        if (
+            normalized ===
+            "HIGH"
+        ) {
+
+            className =
+                "badge badge-high";
+
+        }
+
+        else if (
+            normalized ===
+            "MEDIUM"
+        ) {
+
+            className =
+                "badge badge-medium";
+
+        }
+
+        else if (
+            normalized ===
+            "LOW"
+        ) {
+
+            className =
+                "badge badge-low";
+
+        }
+
+
+        return `
+            <span class="${className}">
+                ${escapeHtml(normalized || "—")}
+            </span>
+        `;
+
+    }
+
+
+
+    /* =====================================================
+       LOAD METRICS
+       ===================================================== */
+
+    async function loadMetrics() {
+
+        const response =
+            await fetch(
+                `${API_BASE}/dashboard/metrics`,
+                {
+                    cache: "no-store"
+                }
+            );
+
+
+        if (!response.ok) {
+
+            throw new Error(
+                "Unable to load dashboard metrics"
+            );
+
+        }
+
+
+        const metrics =
+            await response.json();
+
+
+        document.getElementById(
+            "revenueRisk"
+        ).textContent =
+            formatRupees(
+                metrics.revenue_at_risk
+            );
+
+
+        document.getElementById(
+            "recoveredRevenue"
+        ).textContent =
+            formatRupees(
+                metrics.recovered_revenue
+            );
+
+
+        document.getElementById(
+            "recoveryRate"
+        ).textContent =
+            Number(
+                metrics.recovery_rate_percent || 0
+            ).toFixed(2) + "%";
+
+
+        document.getElementById(
+            "attempts"
+        ).textContent =
+            metrics.recovery_attempts || 0;
+
+
+        document.getElementById(
+            "totalCases"
+        ).textContent =
+            metrics.total_cases || 0;
+
+
+        document.getElementById(
+            "successful"
+        ).textContent =
+            metrics.successful_recoveries || 0;
+
+
+        document.getElementById(
+            "failed"
+        ).textContent =
+            metrics.failed_recoveries || 0;
+
+
+        document.getElementById(
+            "escalated"
+        ).textContent =
+            metrics.escalated_cases || 0;
+
+    }
+
+
+
+    /* =====================================================
+       LOAD RECOVERY CASES
+       ===================================================== */
+
+    async function loadCases() {
+
+        const response =
+            await fetch(
+                `${API_BASE}/dashboard/cases`,
+                {
+                    cache: "no-store"
+                }
+            );
+
+
+        if (!response.ok) {
+
+            throw new Error(
+                "Unable to load recovery cases"
+            );
+
+        }
+
+
+        const data =
+            await response.json();
+
+
+        const cases =
+            data.cases || [];
+
+
+        const table =
+            document.getElementById(
+                "casesTable"
+            );
+
+
+        if (
+            cases.length === 0
+        ) {
+
+            table.innerHTML = `
+                <tr>
+                    <td
+                        colspan="6"
+                        class="message"
+                    >
+                        No recovery cases found.
+                    </td>
+                </tr>
+            `;
+
+            return;
+
+        }
+
+
+        table.innerHTML =
+            cases.map(
+                caseData => {
+
+                    return `
+                        <tr>
+
+                            <td>
+                                <span class="payment-id">
+                                    ${escapeHtml(
+                                        caseData.payment_id
+                                    )}
+                                </span>
+                            </td>
+
+
+                            <td>
+                                ${formatRupees(
+                                    caseData.amount_rupees
+                                )}
+                            </td>
+
+
+                            <td>
+                                ${riskBadge(
+                                    caseData.risk_level
+                                )}
+                            </td>
+
+
+                            <td>
+                                ${escapeHtml(
+                                    caseData.proposed_action ||
+                                    "-"
+                                )}
+                            </td>
+
+
+                            <td>
+                                ${statusBadge(
+                                    caseData.recovery_status
+                                )}
+                            </td>
+
+
+                            <td>
+                                ${formatRupees(
+                                    caseData.recovered_amount
+                                )}
+                            </td>
+
+                        </tr>
+                    `;
+
+                }
+            )
+            .join("");
+
+    }
+
+
+
+    /* =====================================================
+       LOAD REAL AI DECISION
+       ===================================================== */
+
+    async function updateAiPanel() {
+
+        const response =
+            await fetch(
+                `${API_BASE}/dashboard/ai-decision`,
+                {
+                    cache: "no-store"
+                }
+            );
+
+
+        if (!response.ok) {
+
+            throw new Error(
+                "Unable to load AI decision"
+            );
+
+        }
+
+
+        const data =
+            await response.json();
+
+
+        if (
+            !data.available ||
+            !data.decision
+        ) {
+
+            clearAiPanel();
+
+            return;
+
+        }
+
+
+        const decision =
+            data.decision;
+
+
+
+        /* -----------------------------------------------
+           FAILURE CLASSIFICATION
+           ----------------------------------------------- */
+
+        document.getElementById(
+            "failureCategory"
+        ).textContent =
+            decision.failure_category ||
+            "—";
+
+
+
+        /* -----------------------------------------------
+           RISK SCORE
+           ----------------------------------------------- */
+
+        const score =
+            decision.risk_score;
+
+
+        document.getElementById(
+            "riskScore"
+        ).textContent =
+            score !== null &&
+            score !== undefined
+                ? `${score} / 100`
+                : "—";
+
+
+
+        /* -----------------------------------------------
+           RISK LEVEL
+           ----------------------------------------------- */
+
+        document.getElementById(
+            "riskLevel"
+        ).textContent =
+            `Risk Level: ${
+                decision.risk_level || "—"
+            }`;
+
+
+
+        /* -----------------------------------------------
+           RECOMMENDED ACTION
+           ----------------------------------------------- */
+
+        document.getElementById(
+            "recommendedAction"
+        ).textContent =
+            decision.recommended_action ||
+            "—";
+
+
+
+        /* -----------------------------------------------
+           AI CONFIDENCE
+           ----------------------------------------------- */
+
+        if (
+            decision.ai_confidence !==
+            null &&
+            decision.ai_confidence !==
+            undefined
+        ) {
+
+            const confidence =
+                Number(
+                    decision.ai_confidence
+                ) * 100;
+
+
+            document.getElementById(
+                "aiConfidence"
+            ).textContent =
+                `${confidence.toFixed(0)}%`;
+
+        }
+
+        else {
+
+            document.getElementById(
+                "aiConfidence"
+            ).textContent =
+                "—";
+
+        }
+
+
+
+        /* -----------------------------------------------
+           SAFETY DECISION
+           ----------------------------------------------- */
+
+        const safetyDecision =
+            decision.safety_decision ||
+            "—";
+
+
+        const safetyElement =
+            document.getElementById(
+                "safetyDecision"
+            );
+
+
+        safetyElement.textContent =
+            safetyDecision;
+
+
+        safetyElement.className =
+            "decision-value";
+
+
+        if (
+            safetyDecision ===
+            "RECOVER"
+        ) {
+
+            safetyElement.classList.add(
+                "decision-success"
+            );
+
+        }
+
+        else if (
+            safetyDecision ===
+            "ESCALATE"
+        ) {
+
+            safetyElement.classList.add(
+                "decision-warning"
+            );
+
+        }
+
+        else if (
+            safetyDecision ===
+            "BLOCK"
+        ) {
+
+            safetyElement.classList.add(
+                "decision-danger"
+            );
+
+        }
+
+
+
+        /* -----------------------------------------------
+           SAFETY REASON
+           ----------------------------------------------- */
+
+        document.getElementById(
+            "safetyReason"
+        ).textContent =
+            decision.safety_reason ||
+            "—";
+
+
+
+        /* -----------------------------------------------
+           EXECUTION ALLOWED
+           ----------------------------------------------- */
+
+        const executionElement =
+            document.getElementById(
+                "executionAllowed"
+            );
+
+
+        const executionAllowed =
+            Boolean(
+                decision.execution_allowed
+            );
+
+
+        executionElement.textContent =
+            executionAllowed
+                ? "ALLOWED"
+                : "BLOCKED";
+
+
+        executionElement.className =
+            "decision-value";
+
+
+        executionElement.classList.add(
+            executionAllowed
+                ? "decision-success"
+                : "decision-danger"
+        );
+
+
+
+        /* -----------------------------------------------
+           AI REASON
+           ----------------------------------------------- */
+
+        document.getElementById(
+            "aiReason"
+        ).textContent =
+            decision.reason ||
+            "—";
+
+    }
+
+
+
+    /* =====================================================
+       CLEAR AI PANEL
+       ===================================================== */
+
+    function clearAiPanel() {
+
+        document.getElementById(
+            "failureCategory"
+        ).textContent =
+            "—";
+
+
+        document.getElementById(
+            "riskScore"
+        ).textContent =
+            "—";
+
+
+        document.getElementById(
+            "riskLevel"
+        ).textContent =
+            "Risk Level: —";
+
+
+        document.getElementById(
+            "recommendedAction"
+        ).textContent =
+            "—";
+
+
+        document.getElementById(
+            "aiConfidence"
+        ).textContent =
+            "—";
+
+
+        document.getElementById(
+            "safetyDecision"
+        ).textContent =
+            "—";
+
+
+        document.getElementById(
+            "safetyReason"
+        ).textContent =
+            "No AI decision available.";
+
+
+        document.getElementById(
+            "executionAllowed"
+        ).textContent =
+            "—";
+
+
+        document.getElementById(
+            "aiReason"
+        ).textContent =
+            "No AI decision available.";
+
+    }
+
+
+
+    /* =====================================================
+       CHECK BACKEND CONNECTION
+       ===================================================== */
+
+    async function checkBackend() {
+
+        const statusText =
+            document.getElementById(
+                "statusText"
+            );
+
+
+        const statusDot =
+            document.getElementById(
+                "statusDot"
+            );
+
+
+        try {
+
+            const response =
+                await fetch(
+                    `${API_BASE}/health`,
+                    {
+                        cache: "no-store"
+                    }
+                );
+
+
+            if (!response.ok) {
+
+                throw new Error(
+                    "Backend unavailable"
+                );
+
+            }
+
+
+            statusText.textContent =
+                "Backend Connected";
+
+
+            statusDot.classList.remove(
+                "offline"
+            );
+
+        }
+
+        catch (error) {
+
+            statusText.textContent =
+                "Backend Disconnected";
+
+
+            statusDot.classList.add(
+                "offline"
+            );
+
+        }
+
+    }
+
+
+
+    /* =====================================================
+       LOAD COMPLETE DASHBOARD
+       ===================================================== */
+
+    async function loadDashboard() {
+
+        const refreshButton =
+            document.getElementById(
+                "refreshButton"
+            );
+
+
+        refreshButton.disabled = true;
+
+
+        try {
+
+            await checkBackend();
+
+            await loadMetrics();
+
+            await loadCases();
+
+            await updateAiPanel();
+
+
+            document.getElementById(
+                "lastUpdated"
+            ).textContent =
+                "Last updated: " +
+                new Date()
+                    .toLocaleTimeString();
+
+        }
+
+
+        catch (error) {
+
+            console.error(
+                "Dashboard error:",
+                error
+            );
+
+
+            document.getElementById(
+                "casesTable"
+            ).innerHTML = `
+                <tr>
+                    <td
+                        colspan="6"
+                        class="message"
+                    >
+                        Unable to connect to backend.
+                        Make sure the FastAPI server
+                        is running on port 8001.
+                    </td>
+                </tr>
+            `;
+
+        }
+
+
+        finally {
+
+            refreshButton.disabled =
+                false;
+
+        }
+
+    }
+
+
+
+    /* =====================================================
+       INITIAL LOAD
+       ===================================================== */
+
+    loadDashboard();
+
+
+
+    /* =====================================================
+       AUTO REFRESH
+       ===================================================== */
+
+    setInterval(
+        loadDashboard,
+        10000
+    );
+
+</script>
+
+
+</body>
+
+</html>

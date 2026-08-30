@@ -23,7 +23,8 @@ env/
 .DS_Store
 Thumbs.db
 
-# Logs
+# Logs and runtime data
+logs/
 *.log
 
 # Testing / tooling
