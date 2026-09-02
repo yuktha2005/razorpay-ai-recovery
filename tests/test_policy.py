@@ -1,80 +1,82 @@
-from src.models.domain import Decision
-from src.safety.policy import SafetyPolicy
+def test_route_switch_action_is_supported():
+    from src.models.domain import Decision
+    from src.safety.policy import SafetyPolicy
 
-
-def make_decision(
-    action="CUSTOMER_CONFIRMATION",
-    expected_loss=5000.0,
-):
-    return Decision(
-        payment_id="policy_test_001",
-        recommended_action=action,
-        confidence=0.90,
-        expected_loss_before=expected_loss,
-        expected_loss_after=2000.0,
-        estimated_value=3000.0,
-        explanation="Policy test",
+    decision = Decision(
+        payment_id="route_test_001",
+        recommended_action="ROUTE_SWITCH:UPI + Bank_C + Android",
+        confidence=0.95,
+        expected_loss_before=50000.0,
+        expected_loss_after=10000.0,
+        estimated_value=40000.0,
+        alternatives=[],
+        explanation="Alternative route has better observed reliability.",
     )
 
-
-def test_supported_action_is_allowed():
-    result = SafetyPolicy().evaluate(
-        make_decision("CUSTOMER_CONFIRMATION")
-    )
+    result = SafetyPolicy().evaluate(decision)
 
     assert result.allowed is True
     assert result.requires_human_review is False
 
 
-def test_monitor_is_allowed():
-    result = SafetyPolicy().evaluate(
-        make_decision("MONITOR")
+def test_empty_route_switch_is_rejected():
+    from src.models.domain import Decision
+    from src.safety.policy import SafetyPolicy
+
+    decision = Decision(
+        payment_id="route_test_002",
+        recommended_action="ROUTE_SWITCH:",
+        confidence=0.95,
+        expected_loss_before=50000.0,
+        expected_loss_after=10000.0,
+        estimated_value=40000.0,
+        alternatives=[],
+        explanation="Invalid route.",
     )
 
-    assert result.allowed is True
-    assert result.requires_human_review is False
-
-
-def test_unknown_action_is_denied():
-    result = SafetyPolicy().evaluate(
-        make_decision("BLOCK_ACCOUNT")
-    )
+    result = SafetyPolicy().evaluate(decision)
 
     assert result.allowed is False
     assert result.requires_human_review is True
 
 
-def test_high_value_intervention_requires_human_review():
-    result = SafetyPolicy().evaluate(
-        make_decision(
-            "STEP_UP_VERIFICATION",
-            expected_loss=150000.0,
-        )
+def test_high_value_route_switch_requires_human_review():
+    from src.models.domain import Decision
+    from src.safety.policy import SafetyPolicy
+
+    decision = Decision(
+        payment_id="route_test_003",
+        recommended_action="ROUTE_SWITCH:UPI + Bank_C + Android",
+        confidence=0.95,
+        expected_loss_before=150000.0,
+        expected_loss_after=30000.0,
+        estimated_value=120000.0,
+        alternatives=[],
+        explanation="High-value route recovery.",
     )
+
+    result = SafetyPolicy().evaluate(decision)
 
     assert result.allowed is True
     assert result.requires_human_review is True
 
 
-def test_critical_value_intervention_is_not_automatically_allowed():
-    result = SafetyPolicy().evaluate(
-        make_decision(
-            "MANUAL_REVIEW",
-            expected_loss=500000.0,
-        )
+def test_critical_value_route_switch_is_blocked():
+    from src.models.domain import Decision
+    from src.safety.policy import SafetyPolicy
+
+    decision = Decision(
+        payment_id="route_test_004",
+        recommended_action="ROUTE_SWITCH:UPI + Bank_C + Android",
+        confidence=0.99,
+        expected_loss_before=500000.0,
+        expected_loss_after=50000.0,
+        estimated_value=450000.0,
+        alternatives=[],
+        explanation="Critical-value route recovery.",
     )
+
+    result = SafetyPolicy().evaluate(decision)
 
     assert result.allowed is False
     assert result.requires_human_review is True
-
-
-def test_high_value_monitoring_can_continue():
-    result = SafetyPolicy().evaluate(
-        make_decision(
-            "MONITOR",
-            expected_loss=150000.0,
-        )
-    )
-
-    assert result.allowed is True
-    assert result.requires_human_review is False

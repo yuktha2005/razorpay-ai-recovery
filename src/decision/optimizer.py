@@ -12,6 +12,9 @@ class InterventionOptimizer:
     Selects the intervention with the highest positive
     expected financial value.
 
+    The optimizer can compare both payment-level and
+    route-level interventions.
+
     This component recommends actions only.
     It never executes payment operations.
     """
@@ -58,10 +61,32 @@ class InterventionOptimizer:
                 ),
             )
 
+        # ---------------------------------------------------------
+        # Select the intervention with the highest expected value.
+        # ---------------------------------------------------------
         best = max(
             profitable,
             key=lambda intervention: intervention.expected_benefit,
         )
+
+        # ---------------------------------------------------------
+        # Identify whether this is a route-level recommendation.
+        # ---------------------------------------------------------
+        if best.action.startswith("ROUTE_SWITCH:"):
+            route_name = best.action.split(
+                "ROUTE_SWITCH:",
+                1,
+            )[1]
+
+            explanation = (
+                f"Route-level intervention selected for "
+                f"{route_name} because it provides the highest "
+                f"positive expected financial value among the "
+                f"available candidates. Recommendation should "
+                f"remain bounded by the safety controller."
+            )
+        else:
+            explanation = best.explanation
 
         return Decision(
             payment_id=loss_estimate.payment_id,
@@ -71,5 +96,5 @@ class InterventionOptimizer:
             expected_loss_after=best.expected_loss_after,
             estimated_value=best.expected_benefit,
             alternatives=interventions,
-            explanation=best.explanation,
+            explanation=explanation,
         )
