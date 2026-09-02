@@ -52,9 +52,9 @@ if not WEBHOOK_SECRET:
 # PROJECT MODULES
 # =========================================================
 
-from recovery_agent import RecoveryAgent
-from recovery_executor import RecoveryExecutor
-from recovery_tracker import RecoveryTracker
+from src.recovery_agent import RecoveryAgent
+from src.recovery_executor import RecoveryExecutor
+from src.recovery_tracker import RecoveryTracker
 
 
 # =========================================================

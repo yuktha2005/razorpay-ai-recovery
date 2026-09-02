@@ -13,8 +13,7 @@ can execute.
 
 from typing import Dict, Any
 
-from revenue_risk_engine import RevenueRiskEngine
-
+from src.revenue_risk_engine import RevenueRiskEngine
 
 class RecoveryAgent:
 
