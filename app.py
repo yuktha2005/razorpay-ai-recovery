@@ -15,7 +15,17 @@ SRC_DIR = BASE_DIR / "src"
 if str(SRC_DIR) not in sys.path:
     sys.path.append(str(SRC_DIR))
 
+from src.decision.incident_decision_engine import (
+    IncidentDecisionEngine
+)
 
+from src.recovery.recovery_orchestrator import (
+    RecoveryOrchestrator
+)
+
+from src.recovery.recovery_audit_adapter import (
+    record_recovery_outcome
+)
 # =========================================
 # BACKEND IMPORTS
 # =========================================
@@ -1020,9 +1030,276 @@ the observed transaction evidence.
                 f"₹{impact['revenue_at_risk']:,.0f}"
             )
 
+# =====================================
+# DECISION INTELLIGENCE
+# =====================================
+
+st.markdown(
+    '<div class="section-title">'
+    '🧠 Decision Intelligence'
+    '</div>',
+    unsafe_allow_html=True
+)
+
+historical_candidates = transactions.copy()
+historical_candidates["timestamp"] = pd.to_datetime(
+    historical_candidates["timestamp"],
+    format="mixed",
+    errors="coerce"
+)
+
+historical_candidates = historical_candidates[
+    ~(
+        (historical_candidates["timestamp"] >= incident_start)
+        &
+        (historical_candidates["timestamp"] < incident_end)
+    )
+].copy()
+
+candidate_data = (
+    historical_candidates[
+        (historical_candidates["payment_method"] == payment_method)
+        &
+        (historical_candidates["device_type"] == device_type)
+    ]
+    .groupby("bank")
+    .agg(
+        transactions=("transaction_id", "count"),
+        successes=(
+            "status",
+            lambda x: (x == "SUCCESS").sum()
+        ),
+    )
+    .reset_index()
+)
+
+route_candidates = []
+
+for _, row in candidate_data.iterrows():
+
+    if row["bank"] == affected_bank:
+        continue
+
+    route_candidates.append(
+        {
+            "route": (
+                f"{payment_method} + "
+                f"{row['bank']} + "
+                f"{device_type}"
+            ),
+            "transactions": int(row["transactions"]),
+            "successes": int(row["successes"]),
+        }
+    )
+
+average_transaction_value = float(
+    transactions[
+        (transactions["payment_method"] == payment_method)
+        &
+        (transactions["bank"] == affected_bank)
+        &
+        (transactions["device_type"] == device_type)
+    ]["amount"].mean()
+)
+
+try:
+
+    decision_engine = IncidentDecisionEngine()
+
+    intelligence_result = decision_engine.evaluate(
+        incident_route=(
+            f"{payment_method} + "
+            f"{affected_bank} + "
+            f"{device_type}"
+        ),
+        transactions_affected=int(
+            incident["transactions"]
+        ),
+        failures_observed=int(
+            impact["actual_failures"]
+        ),
+        baseline_success_rate=float(
+            incident["baseline_success_rate"]
+        ),
+        current_success_rate=float(
+            incident["success_rate"]
+        ),
+        severity=(
+            "CRITICAL"
+            if degradation >= 20
+            else "DEGRADED"
+        ),
+        average_transaction_value=average_transaction_value,
+        route_candidates=route_candidates,
+        revenue_impact=None,
+    )
+
+except Exception as e:
+
+    intelligence_result = None
+
+    st.error(
+        f"Decision intelligence unavailable: {e}"
+    )
+
+if intelligence_result:
+
+    decision = intelligence_result.decision
+    safety = intelligence_result.safety_decision
+
+    # =====================================
+    # FINAL SCENARIO SAFETY GATE
+    # =====================================
+
+    scenario_decision = scenario_control["decision"]
+    scenario_guardrail = scenario_control["guardrail"]
+
+    if scenario_decision == "ESCALATE":
+
+        safety.allowed = False
+        safety.requires_human_review = True
+        safety.action = "ESCALATE"
+        safety.reason = (
+            "Scenario safety control requires human review "
+            "because AI confidence is below the automation threshold."
+        )
+
+    elif scenario_decision == "STOP":
+
+        safety.allowed = False
+        safety.requires_human_review = False
+        safety.action = "STOP"
+        safety.reason = (
+            "Scenario safety control blocks automated recovery "
+            "because the degradation does not cross the recovery threshold."
+        )
+
+    elif scenario_decision == "CONTINUE":
+
+        safety.allowed = False
+        safety.requires_human_review = False
+        safety.action = "CONTINUE"
+        safety.reason = (
+            "Scenario safety control indicates that the route remains "
+            "within normal operating guardrails."
+        )
+
+    elif scenario_guardrail == "ROLLBACK":
+
+        safety.allowed = False
+        safety.requires_human_review = False
+        safety.action = "ROLLBACK"
+        safety.reason = (
+            "Scenario recovery route breached its configured "
+            "performance guardrail. Recovery must be rolled back."
+        )
+
+    # ---------------------------------
+    # Financial intelligence
+    # ---------------------------------
+
+    di1, di2, di3, di4 = st.columns(4)
+
+    with di1:
+
+        st.metric(
+            "Financial Exposure",
+            f"₹{intelligence_result.financial_exposure:,.0f}"
+        )
+
+    with di2:
+
+        st.metric(
+            "Revenue at Risk",
+            f"₹{intelligence_result.revenue_at_risk:,.0f}"
+        )
+
+    with di3:
+
+        st.metric(
+            "Expected Loss",
+            f"₹{intelligence_result.expected_loss:,.0f}"
+        )
+
+    with di4:
+
+        st.metric(
+            "Decision Confidence",
+            f"{decision.confidence * 100:.1f}%"
+        )
+
+    st.markdown(
+        "### Recommended Intervention"
+    )
+
+    st.info(
+        f"**{decision.recommended_action}**"
+    )
+
+    st.caption(
+        decision.explanation
+    )
+
+    st.markdown(
+        "### 🛡️ Safety Gate"
+    )
+
+    if safety.allowed:
+
+        st.success(
+            f"**{safety.action} — ALLOWED**\n\n"
+            f"{safety.reason}"
+        )
+
+    elif safety.requires_human_review:
+
+        st.warning(
+            f"**{safety.action} — HUMAN REVIEW REQUIRED**\n\n"
+            f"{safety.reason}"
+        )
+
+    else:
+
+        st.error(
+            f"**{safety.action} — BLOCKED**\n\n"
+            f"{safety.reason}"
+        )
+
+    if intelligence_result.ranked_routes:
+
+        st.markdown(
+            "### 🏦 Ranked Alternative Routes"
+        )
+
+        route_rows = []
+
+        for route_score in intelligence_result.ranked_routes:
+
+            route_rows.append(
+                {
+                    "Route": route_score.route,
+                    "Transactions": route_score.transactions,
+                    "Observed Success":
+                        f"{route_score.observed_success_rate * 100:.2f}%",
+                    "Adjusted Success":
+                        f"{route_score.adjusted_success_rate * 100:.2f}%",
+                    "Evidence Confidence":
+                        f"{route_score.evidence_confidence * 100:.2f}%",
+                    "Score":
+                        f"{route_score.score:.4f}",
+                }
+            )
+
+        st.dataframe(
+            pd.DataFrame(route_rows),
+            use_container_width=True,
+            hide_index=True
+        )
 
     # =====================================
     # RECOVERY DECISION
+    # =====================================
+
     # =====================================
 
     st.markdown(
@@ -1076,6 +1353,55 @@ the observed transaction evidence.
                 []
         }
 
+
+    # =====================================
+    # SCENARIO POLICY OVERRIDE
+    # =====================================
+
+    if intelligence_result:
+
+        scenario_decision = scenario_control["decision"]
+        scenario_guardrail = scenario_control["guardrail"]
+
+        if scenario_decision == "ESCALATE":
+
+            policy_result = dict(policy_result)
+            policy_result["decision"] = "ESCALATE"
+            policy_result["approved"] = False
+            policy_result["reason"] = (
+                "Scenario safety control requires human review "
+                "because AI confidence is below the automation threshold."
+            )
+
+        elif scenario_decision == "STOP":
+
+            policy_result = dict(policy_result)
+            policy_result["decision"] = "STOP"
+            policy_result["approved"] = False
+            policy_result["reason"] = (
+                "Scenario safety control blocks automated recovery "
+                "because the degradation does not cross the recovery threshold."
+            )
+
+        elif scenario_decision == "CONTINUE":
+
+            policy_result = dict(policy_result)
+            policy_result["decision"] = "CONTINUE"
+            policy_result["approved"] = False
+            policy_result["reason"] = (
+                "Scenario safety control indicates that the route remains "
+                "within normal operating guardrails. No recovery is required."
+            )
+
+        elif scenario_guardrail == "ROLLBACK":
+
+            policy_result = dict(policy_result)
+            policy_result["decision"] = "ROLLBACK"
+            policy_result["approved"] = False
+            policy_result["reason"] = (
+                "Scenario recovery route breached its configured "
+                "performance guardrail. Recovery must be rolled back."
+            )
 
     # =====================================
     # RECOVERY INFORMATION
@@ -1272,6 +1598,35 @@ recovery action is permitted.
         )
 
 
+    elif decision == "ROLLBACK":
+
+        st.markdown(
+            f"""
+<div class="policy-stop">
+
+<h3>↩️ ROLLBACK — Recovery Reversed</h3>
+
+<b>Decision:</b> {decision}
+
+<br><br>
+
+<b>Policy reason:</b><br>
+{policy_result['reason']}
+
+</div>
+""",
+            unsafe_allow_html=True
+        )
+
+
+    elif decision == "CONTINUE":
+
+        st.success(
+            f"🟢 **CONTINUE — No Recovery Required**\n\n"
+            f"{policy_result['reason']}"
+        )
+
+
     else:
 
         st.markdown(
@@ -1382,6 +1737,21 @@ recovery action is permitted.
             st.warning(
                 "⚠️ Automated recovery is not approved. "
                 "Human review is required before routing changes."
+            )
+
+
+        elif decision == "ROLLBACK":
+
+            st.error(
+                "↩️ Recovery is blocked because the simulated "
+                "alternative route breached its guardrail."
+            )
+
+
+        elif decision == "CONTINUE":
+
+            st.success(
+                "🟢 No automated recovery is required for this scenario."
             )
 
 
@@ -2030,14 +2400,21 @@ These are counterfactual simulation results, not real payment outcomes.
 
             st.warning(
                 "🔒 Simulation is locked because the "
-                "policy engine requires human review."
+                "scenario safety control requires human review."
+            )
+
+        elif decision == "ROLLBACK":
+
+            st.error(
+                "🔒 Simulation is locked because the "
+                "scenario recovery guardrail requires rollback."
             )
 
         else:
 
-            st.error(
-                "🔒 Simulation is locked because the "
-                "policy engine blocked automated recovery."
+            st.info(
+                "🔒 Simulation is not required because the "
+                "scenario control indicates no automated recovery."
             )
 
 
