@@ -5,6 +5,7 @@ import pandas as pd
 from dotenv import load_dotenv
 from pydantic import BaseModel, Field, ValidationError
 from google import genai
+from google.genai import types
 
 
 # =========================================
@@ -373,7 +374,10 @@ def get_gemini_client():
         return None
 
     return genai.Client(
-        api_key=GEMINI_API_KEY
+        api_key=GEMINI_API_KEY,
+        http_options=types.HttpOptions(
+            timeout=10000
+        )
     )
 
 

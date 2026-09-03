@@ -1,4 +1,3 @@
-import json
 import streamlit as st
 import pandas as pd
 import sys
@@ -24,28 +23,8 @@ from src.recovery.recovery_orchestrator import (
     RecoveryOrchestrator
 )
 
-from src.recovery.orchestrated_batch import (
-    execute_orchestrated_batch_recovery
-)
-
 from src.recovery.recovery_audit_adapter import (
     record_recovery_outcome
-)
-
-from src.intelligence.incident_revenue import (
-    IncidentRevenueImpact
-)
-
-from src.live_reporting.report_store import (
-    LiveReportStore
-)
-
-from src.live_reporting.report_generator import (
-    LiveReportGenerator
-)
-
-from src.tracking.learning_history import (
-    PersistentLearningHistory
 )
 # =========================================
 # BACKEND IMPORTS
@@ -465,105 +444,6 @@ st.caption(
     f"{scenario_view['description']} "
     "Scenario values are counterfactual and do not route real payments."
 )
-
-
-# =========================================
-# LIVE OPERATIONS REPORTING
-# =========================================
-
-with st.expander("📡 Real-Time Live Operations Intelligence", expanded=True):
-
-    try:
-        live_store = LiveReportStore()
-        latest_path = live_store.latest()
-
-        if latest_path and latest_path.exists():
-            with open(latest_path, "r", encoding="utf-8") as f:
-                live_report = json.load(f)
-        else:
-            rep_gen = LiveReportGenerator()
-            live_report_obj = rep_gen.generate(transactions)
-            saved_path = live_store.save(live_report_obj)
-            with open(saved_path, "r", encoding="utf-8") as f:
-                live_report = json.load(f)
-
-        lr1, lr2, lr3, lr4 = st.columns(4)
-
-        with lr1:
-            st.metric(
-                "Routes Monitored",
-                f"{live_report.get('routes_monitored', 0)}"
-            )
-
-        with lr2:
-            st.metric(
-                "Healthy Routes",
-                f"{live_report.get('healthy_routes', 0)}"
-            )
-
-        with lr3:
-            st.metric(
-                "Degraded Routes",
-                f"{live_report.get('degraded_routes', 0)}"
-            )
-
-        with lr4:
-            st.metric(
-                "Revenue at Risk",
-                f"₹{live_report.get('revenue_at_risk', 0.0):,.0f}"
-            )
-
-        st.caption(
-            f"Report ID: {live_report.get('report_id')} · "
-            f"Overall Success Rate: {live_report.get('overall_success_rate', 0.0) * 100:.2f}% "
-            f"(Baseline: {live_report.get('baseline_success_rate', 0.9442) * 100:.2f}%) · "
-            f"Top Degraded Route: {live_report.get('top_degraded_route', 'None')}"
-        )
-
-        routes_health_data = live_report.get("route_health", [])
-
-        if routes_health_data:
-            df_rh = pd.DataFrame(routes_health_data)
-            rh_cols = [
-                c for c in [
-                    "route",
-                    "transactions",
-                    "failures",
-                    "success_rate",
-                    "degradation_pp",
-                    "severity"
-                ] if c in df_rh.columns
-            ]
-
-            df_rh_disp = df_rh[rh_cols].copy()
-
-            if "success_rate" in df_rh_disp.columns:
-                df_rh_disp["success_rate"] = df_rh_disp[
-                    "success_rate"
-                ].apply(lambda v: f"{v * 100:.2f}%")
-
-            if "degradation_pp" in df_rh_disp.columns:
-                df_rh_disp["degradation_pp"] = df_rh_disp[
-                    "degradation_pp"
-                ].apply(lambda v: f"{v:.2f}")
-
-            df_rh_disp = df_rh_disp.rename(columns={
-                "route": "Route",
-                "transactions": "Transactions",
-                "failures": "Failures",
-                "success_rate": "Success Rate",
-                "degradation_pp": "Degradation (pp)",
-                "severity": "Severity"
-            })
-
-            st.dataframe(
-                df_rh_disp.head(10),
-                use_container_width=True,
-                hide_index=True
-            )
-
-    except Exception as e:
-        st.warning(f"Live operations report unavailable: {e}")
 
 
 # =========================================
@@ -1151,7 +1031,7 @@ the observed transaction evidence.
             )
 
 # =====================================
-# DECISION INTELLIGENCE
+# NEW DECISION INTELLIGENCE
 # =====================================
 
 st.markdown(
@@ -1161,18 +1041,14 @@ st.markdown(
     unsafe_allow_html=True
 )
 
-historical_candidates = transactions.copy()
-historical_candidates["timestamp"] = pd.to_datetime(
-    historical_candidates["timestamp"],
-    format="mixed",
-    errors="coerce"
-)
+# Build alternative route candidates from
+# historical traffic outside the incident window.
 
-historical_candidates = historical_candidates[
+historical_candidates = transactions[
     ~(
-        (historical_candidates["timestamp"] >= incident_start)
+        (transactions["timestamp"] >= incident_start)
         &
-        (historical_candidates["timestamp"] < incident_end)
+        (transactions["timestamp"] < incident_end)
     )
 ].copy()
 
@@ -1212,38 +1088,28 @@ for _, row in candidate_data.iterrows():
         }
     )
 
+
+# Calculate average transaction value
+# for the affected incident.
+
 average_transaction_value = float(
     transactions[
-        (transactions["payment_method"] == payment_method)
-        &
-        (transactions["bank"] == affected_bank)
-        &
-        (transactions["device_type"] == device_type)
+        (
+            (transactions["payment_method"] == payment_method)
+            &
+            (transactions["bank"] == affected_bank)
+            &
+            (transactions["device_type"] == device_type)
+        )
     ]["amount"].mean()
 )
+
+
+# Evaluate the complete decision pipeline.
 
 try:
 
     decision_engine = IncidentDecisionEngine()
-
-    revenue_impact_obj = None
-    if impact:
-        revenue_impact_obj = IncidentRevenueImpact(
-            incident_transactions=int(incident["transactions"]),
-            incident_failures=int(impact["actual_failures"]),
-            baseline_failure_rate=max(
-                0.0,
-                1.0 - float(incident["baseline_success_rate"]),
-            ),
-            expected_failures=float(impact["expected_failures"]),
-            excess_failures=float(impact["excess_failures"]),
-            actual_failed_amount=float(impact.get("failed_amount", 0.0)),
-            expected_failed_amount=float(
-                impact.get("failed_amount", 0.0)
-                - impact.get("revenue_at_risk", 0.0)
-            ),
-            revenue_at_risk=float(impact["revenue_at_risk"]),
-        )
 
     intelligence_result = decision_engine.evaluate(
         incident_route=(
@@ -1255,8 +1121,8 @@ try:
             incident["transactions"]
         ),
         failures_observed=int(
-            impact["actual_failures"]
-        ),
+    impact["actual_failures"]
+),
         baseline_success_rate=float(
             incident["baseline_success_rate"]
         ),
@@ -1266,11 +1132,14 @@ try:
         severity=(
             "CRITICAL"
             if degradation >= 20
-            else "DEGRADED"
+            else
+            "DEGRADED"
         ),
-        average_transaction_value=average_transaction_value,
+        average_transaction_value=(
+            average_transaction_value
+        ),
         route_candidates=route_candidates,
-        revenue_impact=revenue_impact_obj,
+        revenue_impact=None,
     )
 
 except Exception as e:
@@ -1281,57 +1150,11 @@ except Exception as e:
         f"Decision intelligence unavailable: {e}"
     )
 
+
 if intelligence_result:
 
-    intelligence_decision = intelligence_result.decision
+    decision = intelligence_result.decision
     safety = intelligence_result.safety_decision
-
-    # =====================================
-    # FINAL SCENARIO SAFETY GATE
-    # =====================================
-
-    scenario_decision = scenario_control["decision"]
-    scenario_guardrail = scenario_control["guardrail"]
-
-    if scenario_decision == "ESCALATE":
-
-        safety.allowed = False
-        safety.requires_human_review = True
-        safety.action = "ESCALATE"
-        safety.reason = (
-            "Scenario safety control requires human review "
-            "because AI confidence is below the automation threshold."
-        )
-
-    elif scenario_decision == "STOP":
-
-        safety.allowed = False
-        safety.requires_human_review = False
-        safety.action = "STOP"
-        safety.reason = (
-            "Scenario safety control blocks automated recovery "
-            "because the degradation does not cross the recovery threshold."
-        )
-
-    elif scenario_decision == "CONTINUE":
-
-        safety.allowed = False
-        safety.requires_human_review = False
-        safety.action = "CONTINUE"
-        safety.reason = (
-            "Scenario safety control indicates that the route remains "
-            "within normal operating guardrails."
-        )
-
-    elif scenario_guardrail == "ROLLBACK":
-
-        safety.allowed = False
-        safety.requires_human_review = False
-        safety.action = "ROLLBACK"
-        safety.reason = (
-            "Scenario recovery route breached its configured "
-            "performance guardrail. Recovery must be rolled back."
-        )
 
     # ---------------------------------
     # Financial intelligence
@@ -1364,20 +1187,30 @@ if intelligence_result:
 
         st.metric(
             "Decision Confidence",
-            f"{intelligence_decision.confidence * 100:.1f}%"
+            f"{decision.confidence * 100:.1f}%"
         )
+
+
+    # ---------------------------------
+    # Recommended action
+    # ---------------------------------
 
     st.markdown(
         "### Recommended Intervention"
     )
 
     st.info(
-        f"**{intelligence_decision.recommended_action}**"
+        f"**{decision.recommended_action}**"
     )
 
     st.caption(
-        intelligence_decision.explanation
+        decision.explanation
     )
+
+
+    # ---------------------------------
+    # Safety gate
+    # ---------------------------------
 
     st.markdown(
         "### 🛡️ Safety Gate"
@@ -1390,19 +1223,17 @@ if intelligence_result:
             f"{safety.reason}"
         )
 
-    elif safety.requires_human_review:
-
-        st.warning(
-            f"**{safety.action} — HUMAN REVIEW REQUIRED**\n\n"
-            f"{safety.reason}"
-        )
-
     else:
 
         st.error(
             f"**{safety.action} — BLOCKED**\n\n"
             f"{safety.reason}"
         )
+
+
+    # ---------------------------------
+    # Alternative routes
+    # ---------------------------------
 
     if intelligence_result.ranked_routes:
 
@@ -1434,11 +1265,8 @@ if intelligence_result:
             use_container_width=True,
             hide_index=True
         )
-
     # =====================================
     # RECOVERY DECISION
-    # =====================================
-
     # =====================================
 
     st.markdown(
@@ -1460,143 +1288,38 @@ if intelligence_result:
         incident
     )
 
-    if recovery and "post_recovery_success_rate" in selected_scenario:
-        recovery["simulated_success_rate"] = float(
-            selected_scenario["post_recovery_success_rate"]
-        )
-        recovery["alternative_success_rate"] = float(
-            selected_scenario["post_recovery_success_rate"]
-        )
 
-
-       # =====================================
+    # =====================================
     # POLICY GATE
     # =====================================
 
-    # The deterministic IncidentDecisionEngine is the
-    # authoritative recovery authorization layer.
-    #
-    # The legacy policy engine is still evaluated so that
-    # its individual policy checks remain visible in the UI,
-    # but the final decision is derived from the deterministic
-    # safety decision above.
-
     if recovery:
 
-        legacy_policy_result = evaluate_recovery_policy(
-            transactions,
-            incident,
-            recovery,
-            recovery_attempts=0
+        policy_result = (
+            evaluate_recovery_policy(
+                transactions,
+                incident,
+                recovery,
+                recovery_attempts=0
+            )
         )
 
     else:
 
-        legacy_policy_result = {
-            "decision": "STOP",
-            "approved": False,
-            "reason": "No recovery recommendation available.",
-            "checks": []
+        policy_result = {
+            "decision":
+                "STOP",
+
+            "approved":
+                False,
+
+            "reason":
+                "No recovery recommendation available.",
+
+            "checks":
+                []
         }
 
-
-    # Preserve the existing policy-check information while
-    # making Decision Intelligence the authoritative control.
-    policy_result = dict(legacy_policy_result)
-
-    if intelligence_result:
-
-        if safety.requires_human_review:
-
-            policy_result["decision"] = "ESCALATE"
-            policy_result["approved"] = False
-            policy_result["reason"] = safety.reason
-
-        elif not safety.allowed:
-
-            policy_result["decision"] = safety.action
-            policy_result["approved"] = False
-            policy_result["reason"] = safety.reason
-
-        elif (
-            intelligence_decision.recommended_action.startswith(
-                "ROUTE_SWITCH:"
-            )
-            and recovery
-        ):
-
-            policy_result["decision"] = "RECOVER"
-            policy_result["approved"] = True
-            policy_result["reason"] = (
-                "Decision Intelligence authorized a bounded route-switch "
-                "recovery after deterministic safety checks passed."
-            )
-
-        else:
-
-            policy_result["decision"] = "CONTINUE"
-            policy_result["approved"] = False
-            policy_result["reason"] = (
-                "Decision Intelligence determined that automated recovery "
-                "is not required."
-            )
-
-
-    # =====================================
-    # SCENARIO POLICY OVERRIDE
-    # =====================================
-
-    # Scenario controls remain a hard safety overlay for
-    # controlled validation scenarios.
-
-    if intelligence_result:
-
-        scenario_decision = scenario_control["decision"]
-        scenario_guardrail = scenario_control["guardrail"]
-
-        if scenario_decision == "ESCALATE":
-
-            policy_result = dict(policy_result)
-
-            policy_result["decision"] = "ESCALATE"
-            policy_result["approved"] = False
-            policy_result["reason"] = (
-                "Scenario safety control requires human review "
-                "because AI confidence is below the automation threshold."
-            )
-
-        elif scenario_decision == "STOP":
-
-            policy_result = dict(policy_result)
-
-            policy_result["decision"] = "STOP"
-            policy_result["approved"] = False
-            policy_result["reason"] = (
-                "Scenario safety control blocks automated recovery "
-                "because the degradation does not cross the recovery threshold."
-            )
-
-        elif scenario_decision == "CONTINUE":
-
-            policy_result = dict(policy_result)
-
-            policy_result["decision"] = "CONTINUE"
-            policy_result["approved"] = False
-            policy_result["reason"] = (
-                "Scenario safety control indicates that the route remains "
-                "within normal operating guardrails. No recovery is required."
-            )
-
-        elif scenario_guardrail == "ROLLBACK":
-
-            policy_result = dict(policy_result)
-
-            policy_result["decision"] = "ROLLBACK"
-            policy_result["approved"] = False
-            policy_result["reason"] = (
-                "Scenario recovery route breached its configured "
-                "performance guardrail. Recovery must be rolled back."
-            )
 
     # =====================================
     # RECOVERY INFORMATION
@@ -1793,35 +1516,6 @@ recovery action is permitted.
         )
 
 
-    elif decision == "ROLLBACK":
-
-        st.markdown(
-            f"""
-<div class="policy-stop">
-
-<h3>↩️ ROLLBACK — Recovery Reversed</h3>
-
-<b>Decision:</b> {decision}
-
-<br><br>
-
-<b>Policy reason:</b><br>
-{policy_result['reason']}
-
-</div>
-""",
-            unsafe_allow_html=True
-        )
-
-
-    elif decision == "CONTINUE":
-
-        st.success(
-            f"🟢 **CONTINUE — No Recovery Required**\n\n"
-            f"{policy_result['reason']}"
-        )
-
-
     else:
 
         st.markdown(
@@ -1932,21 +1626,6 @@ recovery action is permitted.
             st.warning(
                 "⚠️ Automated recovery is not approved. "
                 "Human review is required before routing changes."
-            )
-
-
-        elif decision == "ROLLBACK":
-
-            st.error(
-                "↩️ Recovery is blocked because the simulated "
-                "alternative route breached its guardrail."
-            )
-
-
-        elif decision == "CONTINUE":
-
-            st.success(
-                "🟢 No automated recovery is required for this scenario."
             )
 
 
@@ -2322,435 +2001,254 @@ recovery action is permitted.
 
     if recovery:
 
-        triggered_simulation = False
-        simulation_human_approved = False
-
         if decision == "RECOVER":
 
-            simulate_btn = st.button(
+            simulate = st.button(
                 "🚀 Simulate Approved Batch Recovery",
                 type="primary",
                 use_container_width=True
             )
 
-            if simulate_btn:
-                triggered_simulation = True
-                simulation_human_approved = False
+            if simulate:
 
-        elif decision == "ESCALATE":
+                with st.spinner(
+                    "Simulating recovery across the affected batch..."
+                ):
 
-            st.markdown(
-                """
-                <div class="policy-escalate" style="padding: 16px; border-radius: 8px; margin-bottom: 16px;">
-                <h4 style="margin-top:0;">🛡️ PRODUCTION SAFETY DECISION: HUMAN REVIEW REQUIRED</h4>
-                <b>Status:</b> 🔒 Automated Execution Strictly Blocked<br>
-                <b>Reason:</b> High-impact route recovery requires human authorization before intervention. Automated routing is strictly prevented by the deterministic SafetyController.
-                </div>
-                """,
-                unsafe_allow_html=True
-            )
+                    try:
 
-            st.markdown("#### 👤 Operator Authorization (Simulation / Demo Only)")
+                        batch_result = run_batch_recovery(
+                            transactions,
+                            incident,
+                            recovery,
+                            batch_size=1000
+                        )
 
-            st.caption(
-                "Explicit human-in-the-loop authorization to evaluate a bounded canary recovery simulation. "
-                "No real payments or live routing are performed."
-            )
+                        st.session_state["batch_result"] = batch_result
 
-            human_auth_confirmed = st.checkbox(
-                "Authorize Bounded Recovery Simulation as Human Operator (Demo / Simulation Only)",
-                key="human_operator_simulation_auth"
-            )
+                    except Exception as e:
 
-            if human_auth_confirmed:
+                        batch_result = None
+                        st.session_state["batch_result"] = None
 
-                st.markdown(
-                    """
-                    <div style="background-color: #1e293b; border-left: 4px solid #3b82f6; padding: 12px; border-radius: 6px; margin-bottom: 12px;">
-                    <span style="color: #60a5fa; font-weight: bold;">🔬 SIMULATION AUTHORIZATION = HUMAN APPROVED FOR DEMO</span><br>
-                    <span style="font-size: 0.9em; color: #cbd5e1;">Bounded canary simulation authorized by operator. Production safety gate remains strictly logged as HUMAN REVIEW REQUIRED.</span>
-                    </div>
-                    """,
-                    unsafe_allow_html=True
-                )
+                        st.error(
+                            f"Batch recovery simulation failed: {e}"
+                        )
 
-                sim_escalate_btn = st.button(
-                    "🚀 Simulate Human-Approved Bounded Recovery",
-                    type="primary",
-                    use_container_width=True
-                )
 
-                if sim_escalate_btn:
-                    triggered_simulation = True
-                    simulation_human_approved = True
+                if batch_result:
+                                        # =================================
+                    # RECOVERY SAFETY GUARDRAIL
+                    # =================================
 
-            else:
-
-                st.info("Operator confirmation required above to simulate human-approved bounded recovery.")
-
-        elif decision == "ROLLBACK":
-
-            st.markdown(
-                """
-                <div class="policy-stop" style="padding: 16px; border-radius: 8px; margin-bottom: 16px;">
-                <h4 style="margin-top:0;">↩️ SCENARIO GUARDRAIL: ROLLBACK DEMONSTRATION</h4>
-                <b>Condition:</b> Recovery starts, but alternative route performance degrades below the guardrail threshold (88.39% < 91.00%).<br>
-                <b>Objective:</b> Demonstrate automatic circuit breaker activation and rollback enforcement.
-                </div>
-                """,
-                unsafe_allow_html=True
-            )
-
-            rollback_btn = st.button(
-                "🔄 Simulate Active Recovery with Guardrail Monitoring (Rollback Test)",
-                type="primary",
-                use_container_width=True
-            )
-
-            if rollback_btn:
-                triggered_simulation = True
-                simulation_human_approved = True
-
-        elif decision == "STOP":
-
-            st.markdown(
-                """
-                <div class="policy-stop" style="padding: 16px; border-radius: 8px; margin-bottom: 16px;">
-                <h4 style="margin-top:0;">🔴 PRODUCTION SAFETY DECISION: STOP</h4>
-                <b>Status:</b> 🔒 Automated Recovery Blocked<br>
-                <b>Reason:</b> Mild degradation (3.92 pp) does not cross the recovery threshold (5.00 pp). Interventions for sub-threshold events introduce unnecessary switching risk.
-                </div>
-                """,
-                unsafe_allow_html=True
-            )
-
-            stop_btn = st.button(
-                "🔒 Verify Bounded Safety Gate Enforcement (Simulate Blocked Execution)",
-                use_container_width=True
-            )
-
-            if stop_btn:
-                triggered_simulation = True
-                simulation_human_approved = False
-
-        else:
-
-            st.success(
-                "🟢 **CONTINUE — Normal Operations Confirmed**\n\n"
-                "Payment route is operating normally within configured performance guardrails. "
-                "No recovery intervention is required or permitted."
-            )
-
-        if triggered_simulation:
-
-            with st.spinner(
-                "Simulating recovery across the affected batch..."
-            ):
-
-                try:
-
-                    batch_result = execute_orchestrated_batch_recovery(
-                        transactions=transactions,
-                        incident=incident,
-                        decision=intelligence_result.decision,
-                        safety=safety,
-                        recovery=recovery,
-                        payment_method=payment_method,
-                        affected_bank=affected_bank,
-                        device_type=device_type,
-                        batch_size=50,
-                        human_approved=simulation_human_approved,
+                    guardrail_decision = batch_result.get(
+                        "guardrail_decision",
+                        "NOT_RECORDED"
                     )
 
-                    st.session_state["batch_result"] = batch_result
-
-                except Exception as e:
-
-                    batch_result = None
-                    st.session_state["batch_result"] = None
-
-                    st.error(
-                        f"Batch recovery simulation failed: {e}"
+                    guardrail_reason = batch_result.get(
+                        "guardrail_reason",
+                        "No guardrail information available."
                     )
 
-        batch_result = st.session_state.get("batch_result")
+                    recovery_healthy = batch_result.get(
+                        "recovery_healthy",
+                        False
+                    )
 
-        if batch_result:
+                    rollback_required = batch_result.get(
+                        "rollback_required",
+                        False
+                    )
 
-            # =====================================
-            # SAFETY & SIMULATION DISTINCTION
-            # =====================================
 
-            if batch_result.get("simulation_authorized"):
+                    st.markdown(
+                        "### 🛡️ Recovery Safety Guardrail"
+                    )
 
-                st.markdown(
-                    """
-                    <div style="background: rgba(59, 130, 246, 0.12); border: 1px solid #3b82f6; border-radius: 8px; padding: 14px; margin-top: 14px; margin-bottom: 14px;">
-                    <span style="font-size: 1.05em; font-weight: bold; color: #f59e0b;">🛡️ PRODUCTION SAFETY DECISION: HUMAN REVIEW REQUIRED</span><br>
-                    <span style="font-size: 1.05em; font-weight: bold; color: #60a5fa;">🔬 SIMULATION AUTHORIZATION: HUMAN APPROVED FOR DEMO</span><br>
-                    <small style="color: #94a3b8;">Original production safety decision strictly preserved in audit trail as policy_approved=False, human_review_required=True.</small>
-                    </div>
-                    """,
-                    unsafe_allow_html=True
-                )
 
-            else:
+                    if guardrail_decision == "CONTINUE":
 
-                st.markdown(
-                    f"""
-                    <div style="background: rgba(16, 185, 129, 0.12); border: 1px solid #10b981; border-radius: 8px; padding: 14px; margin-top: 14px; margin-bottom: 14px;">
-                    <span style="font-size: 1.05em; font-weight: bold; color: #10b981;">🛡️ PRODUCTION SAFETY DECISION: {batch_result.get('safety_action', 'APPROVED')}</span><br>
-                    <span style="font-size: 1.05em; font-weight: bold; color: #10b981;">🔬 EXECUTION CONTEXT: BOUNDED SIMULATION ({batch_result.get('final_status', 'COMPLETED')})</span>
-                    </div>
-                    """,
-                    unsafe_allow_html=True
-                )
+                        st.success(
+                            f"🟢 **CONTINUE — Recovery healthy**\n\n"
+                            f"{guardrail_reason}"
+                        )
 
-            # =====================================
-            # RECOVERY SAFETY GUARDRAIL
-            # =====================================
+                    elif guardrail_decision == "ROLLBACK":
 
-            guardrail_decision = batch_result.get(
-                "guardrail_decision",
-                "NOT_RECORDED"
-            )
+                        st.error(
+                            f"↩️ **ROLLBACK — Recovery guardrail breached**\n\n"
+                            f"{guardrail_reason}"
+                        )
 
-            guardrail_reason = batch_result.get(
-                "guardrail_reason",
-                "No guardrail information available."
-            )
+                    elif guardrail_decision == "STOP":
 
-            recovery_healthy = batch_result.get(
-                "recovery_healthy",
-                False
-            )
+                        st.error(
+                            f"🔴 **STOP — Recovery halted**\n\n"
+                            f"{guardrail_reason}"
+                        )
 
-            rollback_required = batch_result.get(
-                "rollback_required",
-                False
-            )
+                    else:
 
-            st.markdown(
-                "### 🛡️ Recovery Safety Guardrail"
-            )
+                        st.info(
+                            f"Guardrail status: "
+                            f"{guardrail_decision}\n\n"
+                            f"{guardrail_reason}"
+                        )
 
-            if guardrail_decision == "CONTINUE":
 
-                st.success(
-                    f"🟢 **CONTINUE — Recovery healthy**\n\n"
-                    f"{guardrail_reason}"
-                )
+                    g1, g2, g3 = st.columns(3)
 
-            elif guardrail_decision == "ROLLBACK":
 
-                st.error(
-                    f"↩️ **ROLLBACK — Recovery guardrail breached**\n\n"
-                    f"{guardrail_reason}"
-                )
+                    with g1:
 
-            elif guardrail_decision == "STOP":
+                        st.metric(
+                            "Guardrail",
+                            guardrail_decision
+                        )
 
-                st.error(
-                    f"🔴 **STOP — Recovery halted**\n\n"
-                    f"{guardrail_reason}"
-                )
 
-            else:
+                    with g2:
 
-                st.info(
-                    f"Guardrail status: "
-                    f"{guardrail_decision}\n\n"
-                    f"{guardrail_reason}"
-                )
+                        st.metric(
+                            "Recovery Healthy",
+                            "YES"
+                            if recovery_healthy
+                            else "NO"
+                        )
 
-            g1, g2, g3 = st.columns(3)
 
-            with g1:
-                st.metric(
-                    "Guardrail",
-                    guardrail_decision
-                )
+                    with g3:
 
-            with g2:
-                st.metric(
-                    "Recovery Healthy",
-                    "YES" if recovery_healthy else "NO"
-                )
+                        st.metric(
+                            "Rollback Required",
+                            "YES"
+                            if rollback_required
+                            else "NO"
+                        )
 
-            with g3:
-                st.metric(
-                    "Rollback Required",
-                    "YES" if rollback_required else "NO"
-                )
+                    st.success(
+                        "Approved recovery strategy simulated across the affected batch."
+                    )
 
-            # =====================================
-            # CANARY CONTROL DECISION
-            # =====================================
+                    # ---------------------------------
+                    # BATCH OUTCOME
+                    # ---------------------------------
 
-            canary_decision = batch_result.get(
-                "canary_decision",
-                batch_result.get("final_status", "PENDING")
-            )
+                    st.markdown(
+                        '<div class="simulation-result">',
+                        unsafe_allow_html=True
+                    )
 
-            canary_reason = batch_result.get(
-                "canary_reason",
-                "Canary decision is recorded by the recovery orchestrator."
-            )
+                    st.markdown(
+                        "### 📊 Recovery Outcome"
+                    )
 
-            st.markdown(
-                "### 🎯 Canary Control Decision"
-            )
+                    c1, c2, c3, c4 = st.columns(4)
 
-            if canary_decision == "EXPAND":
+                    with c1:
 
-                st.success(
-                    f"🟢 **EXPAND — Canary passed**\n\n"
-                    f"{canary_reason}"
-                )
+                        st.metric(
+                            "Eligible Transactions",
+                            f"{batch_result['eligible_transactions']:,}"
+                        )
 
-            elif canary_decision == "STOP":
+                    with c2:
 
-                st.warning(
-                    f"🟡 **STOP — Canary expansion blocked**\n\n"
-                    f"{canary_reason}"
-                )
+                        st.metric(
+                            "Simulated Recovered",
+                            f"{batch_result['recovered_transactions']:,}"
+                        )
 
-            elif canary_decision == "ESCALATE":
+                    with c3:
 
-                st.error(
-                    f"🔴 **ESCALATE — Human review required**\n\n"
-                    f"{canary_reason}"
-                )
+                        st.metric(
+                            "Remaining Failed",
+                            f"{batch_result['remaining_failed']:,}"
+                        )
 
-            elif canary_decision == "BLOCKED":
+                    with c4:
 
-                st.error(
-                    f"🔒 **BLOCKED — Execution blocked by safety controller**\n\n"
-                    f"{canary_reason}"
-                )
+                        st.metric(
+                            "Batch Recovery Rate",
+                            f"{batch_result['recovery_rate'] * 100:.2f}%"
+                        )
 
-            else:
+                    c1, c2, c3 = st.columns(3)
 
-                st.info(
-                    f"Canary decision: **{canary_decision}**\n\n"
-                    f"{canary_reason}"
-                )
+                    with c1:
 
-            st.caption(
-                "Canary decisions are bounded controls. "
-                "EXPAND authorizes evaluation for a larger bounded batch; "
-                "it does not trigger live payment routing."
-            )
+                        st.metric(
+                            "Success Improvement",
+                            f"+{batch_result['success_rate_improvement'] * 100:.2f} pp"
+                        )
 
-            # -------------------------------------
-            # BATCH OUTCOME
-            # -------------------------------------
+                    with c2:
 
-            st.markdown(
-                '<div class="simulation-result">',
-                unsafe_allow_html=True
-            )
+                        st.metric(
+                            "Expected Additional Successes",
+                            f"{batch_result['expected_additional_successes']:.1f}"
+                        )
 
-            st.markdown(
-                "### 📊 Recovery Outcome"
-            )
+                    with c3:
 
-            c1, c2, c3, c4 = st.columns(4)
+                        st.metric(
+                            "Recommended Bank",
+                            batch_result["alternative_bank"]
+                        )
 
-            with c1:
-                st.metric(
-                    "Eligible Transactions",
-                    f"{batch_result.get('eligible_transactions', 0):,}"
-                )
+                    c1, c2 = st.columns(2)
 
-            with c2:
-                st.metric(
-                    "Simulated Recovered",
-                    f"{batch_result.get('recovered_transactions', 0):,}"
-                )
+                    with c1:
 
-            with c3:
-                st.metric(
-                    "Canary Attempted",
-                    f"{batch_result.get('attempted_transactions', 0):,}"
-                )
+                        st.metric(
+                            "Estimated Recovered Value",
+                            f"₹{batch_result['estimated_recovered_value']:,.2f}"
+                        )
 
-            with c4:
-                st.metric(
-                    "Canary Recovery Rate",
-                    f"{batch_result.get('canary_recovery_rate', 0.0) * 100:.2f}%"
-                )
+                    with c2:
 
-            c1, c2, c3 = st.columns(3)
+                        st.metric(
+                            "Simulated Recovered Value",
+                            f"₹{batch_result['simulated_recovered_value']:,.2f}"
+                        )
 
-            with c1:
-                st.metric(
-                    "Success Improvement",
-                    f"+{batch_result.get('success_rate_improvement', 0.0) * 100:.2f} pp"
-                )
-
-            with c2:
-                st.metric(
-                    "Expected Additional Successes",
-                    f"{batch_result.get('expected_additional_successes', 0.0):.1f}"
-                )
-
-            with c3:
-                st.metric(
-                    "Recommended Bank",
-                    str(batch_result.get("alternative_bank", "None"))
-                )
-
-            c1, c2 = st.columns(2)
-
-            with c1:
-                st.metric(
-                    "Estimated Recovered Value",
-                    f"₹{batch_result.get('estimated_recovered_value', 0.0):,.2f}"
-                )
-
-            with c2:
-                st.metric(
-                    "Simulated Recovered Value",
-                    f"₹{batch_result.get('simulated_recovered_value', 0.0):,.2f}"
-                )
-
-            st.markdown(
-                f"""
+                    st.markdown(
+                        f"""
 <div class="explanation-card">
 
 <b>Counterfactual batch result:</b>
 
 Of
-<b>{batch_result.get('eligible_transactions', 0):,}</b>
+<b>{batch_result['eligible_transactions']:,}</b>
 eligible failed transactions,
-<b>{batch_result.get('recovered_transactions', 0):,}</b>
+<b>{batch_result['recovered_transactions']:,}</b>
 are simulated as recovered by shifting eligible traffic from
-<b>{batch_result.get('alternative_bank', 'None')}</b>
+<b>{batch_result['alternative_bank']}</b>
 according to the recovery strategy.
 
 <br><br>
 
-<b>{batch_result.get('attempted_transactions', 0):,}</b>
-transactions were executed in the bounded canary, while the canary recovery rate reaches
-<b>{batch_result.get('canary_recovery_rate', 0.0) * 100:.2f}%</b>.
+<b>{batch_result['remaining_failed']:,}</b>
+transactions remain failed in the simulation, while the batch recovery rate reaches
+<b>{batch_result['recovery_rate'] * 100:.2f}%</b>.
 
 <br><br>
 
 The model expected approximately
-<b>{batch_result.get('expected_additional_successes', 0.0):.1f}</b>
-additional successes across the affected traffic, while the bounded canary produced
-<b>{batch_result.get('recovered_transactions', 0):,}</b>
+<b>{batch_result['expected_additional_successes']:.1f}</b>
+additional successes, while the batch simulation produced
+<b>{batch_result['recovered_transactions']:,}</b>
 simulated recoveries.
 
 <br><br>
 
 <b>Estimated recoverable value:</b>
-₹{batch_result.get('estimated_recovered_value', 0.0):,.2f}
+₹{batch_result['estimated_recovered_value']:,.2f}
 <br>
 
 <b>Simulated recovered value:</b>
-₹{batch_result.get('simulated_recovered_value', 0.0):,.2f}
+₹{batch_result['simulated_recovered_value']:,.2f}
 
 <br><br>
 
@@ -2758,12 +2256,32 @@ These are counterfactual simulation results, not real payment outcomes.
 
 </div>
 """,
-                unsafe_allow_html=True
+                        unsafe_allow_html=True
+                    )
+
+                    st.markdown(
+                        '</div>',
+                        unsafe_allow_html=True
+                    )
+
+                elif batch_result == {}:
+
+                    st.warning(
+                        "Batch recovery simulation returned no eligible transactions."
+                    )
+
+        elif decision == "ESCALATE":
+
+            st.warning(
+                "🔒 Simulation is locked because the "
+                "policy engine requires human review."
             )
 
-            st.markdown(
-                '</div>',
-                unsafe_allow_html=True
+        else:
+
+            st.error(
+                "🔒 Simulation is locked because the "
+                "policy engine blocked automated recovery."
             )
 
 
@@ -2907,18 +2425,7 @@ if run_analysis:
 
             else:
 
-                execution_result = execute_orchestrated_batch_recovery(
-                    transactions=transactions,
-                    incident=incident,
-                    decision=intelligence_result.decision,
-                    safety=safety,
-                    recovery=recovery,
-                    payment_method=payment_method,
-                    affected_bank=affected_bank,
-                    device_type=device_type,
-                    batch_size=50,
-                    human_approved=(decision in ("RECOVER", "ROLLBACK")),
-                )
+                execution_result = execute_batch_recovery()
 
                 if execution_result is not None:
 
@@ -3316,85 +2823,6 @@ else:
         use_container_width=True,
         hide_index=True
     )
-
-
-# =========================================
-# CONTINUOUS ROUTE LEARNING & EVIDENCE
-# =========================================
-
-st.divider()
-
-st.markdown(
-    '<div class="section-title">'
-    '🧠 Continuous Recovery Learning & Evidence'
-    '</div>',
-    unsafe_allow_html=True
-)
-
-st.caption(
-    "Bayesian route-level intelligence learned from verified recovery outcomes across payment routes."
-)
-
-try:
-    history_loader = PersistentLearningHistory()
-    learned_routes = history_loader.load()
-
-    if learned_routes:
-        total_learned_routes = len(learned_routes)
-        total_attempts = sum(r.attempts for r in learned_routes)
-        total_recoveries = sum(r.recoveries for r in learned_routes)
-        total_net_value = sum(r.net_recovered_value for r in learned_routes)
-
-        l1, l2, l3, l4 = st.columns(4)
-
-        with l1:
-            st.metric(
-                "Learned Routes",
-                f"{total_learned_routes}"
-            )
-
-        with l2:
-            st.metric(
-                "Cumulative Attempts",
-                f"{total_attempts:,}"
-            )
-
-        with l3:
-            st.metric(
-                "Verified Recoveries",
-                f"{total_recoveries:,}"
-            )
-
-        with l4:
-            st.metric(
-                "Net Recovered Value",
-                f"₹{total_net_value:,.2f}"
-            )
-
-        learning_rows = []
-        for r in learned_routes:
-            learning_rows.append({
-                "Route": r.route,
-                "Attempts": r.attempts,
-                "Recoveries": r.recoveries,
-                "Recovery Rate": f"{r.recovery_rate * 100:.1f}%",
-                "Recovered Value": f"₹{r.total_recovered_value:,.2f}",
-                "Execution Cost": f"₹{r.total_execution_cost:,.2f}",
-                "Net Value": f"₹{r.net_recovered_value:,.2f}",
-                "Evidence Confidence": f"{r.evidence_confidence * 100:.1f}%",
-            })
-
-        st.dataframe(
-            pd.DataFrame(learning_rows),
-            use_container_width=True,
-            hide_index=True
-        )
-
-    else:
-        st.info("No route learning observations recorded yet.")
-
-except Exception as e:
-    st.warning(f"Could not load recovery learning history: {e}")
 
 
 # =========================================

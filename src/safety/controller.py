@@ -96,7 +96,7 @@ class SafetyController:
             return SafetyDecision(
                 payment_id=decision.payment_id,
                 action=action,
-                allowed=True,
+                allowed=False,
                 reason=policy_result.reason,
                 requires_human_review=True,
             )

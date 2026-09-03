@@ -12,6 +12,8 @@ def record_recovery_outcome(
     device_type: str,
     incident_transactions: int,
     average_transaction_value: float,
+    original_safety=None,
+    simulation_authorized: bool = False,
 ):
     """
     Convert the new recovery orchestration result into the
@@ -60,14 +62,27 @@ def record_recovery_outcome(
 
     # ---------------------------------------------------------
     # Policy information
+    #
+    # Never overwrite the original production safety decision.
+    # If an original_safety is provided, record it faithfully.
     # ---------------------------------------------------------
 
-    policy_result = {
-        "decision": orchestration_result.safety_action,
-        "approved": orchestration_result.safety_allowed,
-        "reason": orchestration_result.explanation,
-        "human_review_required": False,
-    }
+    if original_safety is not None:
+        policy_result = {
+            "decision": original_safety.action,
+            "approved": original_safety.allowed,
+            "reason": original_safety.reason,
+            "human_review_required": (
+                original_safety.requires_human_review
+            ),
+        }
+    else:
+        policy_result = {
+            "decision": orchestration_result.safety_action,
+            "approved": orchestration_result.safety_allowed,
+            "reason": orchestration_result.explanation,
+            "human_review_required": False,
+        }
 
     # ---------------------------------------------------------
     # Determine recovery health

@@ -28,7 +28,7 @@ class RecoveryOrchestrationResult:
     recovery_outcome: object
     final_status: str
     explanation: str
-    canary_decision: str = "NOT_APPLICABLE"
+    canary_decision: str = "PENDING"
     canary_reason: str = ""
     learning_stats: Optional[RouteLearningStats] = None
 
@@ -63,9 +63,6 @@ class RecoveryOrchestrator:
         learning_engine: Optional[
             RecoveryLearningEngine
         ] = None,
-        canary_controller: Optional[
-            CanaryController
-        ] = None,
     ):
         self.executor = (
             executor
@@ -85,11 +82,7 @@ class RecoveryOrchestrator:
             else RecoveryLearningEngine()
         )
 
-        self.canary_controller = (
-            canary_controller
-            if canary_controller is not None
-            else CanaryController()
-        )
+        self.canary_controller = CanaryController()
 
         # Restore persisted learning when the application starts.
         self._restore_learning_history()
@@ -113,15 +106,6 @@ class RecoveryOrchestrator:
     ) -> RecoveryOrchestrationResult:
         """
         Execute a safety-gated recovery decision.
-
-        Lifecycle:
-
-        1. Safety validation
-        2. Bounded execution
-        3. Outcome verification
-        4. Canary evaluation
-        5. Route learning
-        6. Persistence
         """
 
         # ---------------------------------------------------------
@@ -156,11 +140,6 @@ class RecoveryOrchestrator:
                 recovery_outcome=recovery_outcome,
                 final_status="BLOCKED",
                 explanation=safety_decision.reason,
-                canary_decision="BLOCKED",
-                canary_reason=(
-                    "Recovery was blocked by the safety controller. "
-                    "No canary execution was permitted."
-                ),
             )
 
         # ---------------------------------------------------------
@@ -189,17 +168,15 @@ class RecoveryOrchestrator:
                 recovery_outcome=recovery_outcome,
                 final_status="MONITORING",
                 explanation=safety_decision.reason,
-                canary_decision="NOT_APPLICABLE",
-                canary_reason=(
-                    "Monitor-only decisions do not execute "
-                    "a recovery canary."
-                ),
             )
 
         # ---------------------------------------------------------
         # 3. Safety action must match recommended action
         # ---------------------------------------------------------
-        if safety_decision.action != decision.recommended_action:
+        if (
+            safety_decision.action
+            != decision.recommended_action
+        ):
 
             reason = (
                 "Execution blocked because the safety "
@@ -233,8 +210,6 @@ class RecoveryOrchestrator:
                 recovery_outcome=recovery_outcome,
                 final_status="BLOCKED",
                 explanation=reason,
-                canary_decision="BLOCKED",
-                canary_reason=reason,
             )
 
         # ---------------------------------------------------------
@@ -249,13 +224,9 @@ class RecoveryOrchestrator:
         # ---------------------------------------------------------
         # 5. Verify recovery outcome
         # ---------------------------------------------------------
-        attempted_transactions = (
-            execution_result.attempted_transactions
-        )
-
         recovery_outcome = self.outcome_verifier.verify(
             transaction_amounts=transaction_amounts[
-                :attempted_transactions
+                :execution_result.attempted_transactions
             ],
             successful_recoveries=(
                 execution_result.successful_recoveries
@@ -268,6 +239,8 @@ class RecoveryOrchestrator:
             ),
         )
 
+        learning_stats = None
+
         # ---------------------------------------------------------
         # 6. Evaluate bounded recovery canary
         # ---------------------------------------------------------
@@ -278,16 +251,12 @@ class RecoveryOrchestrator:
             successful_recoveries=(
                 execution_result.successful_recoveries
             ),
-            expected_recovery_rate=(
-                simulated_success_rate
-            ),
+            expected_recovery_rate=simulated_success_rate,
         )
 
         # ---------------------------------------------------------
         # 7. Learn from verified route recovery
         # ---------------------------------------------------------
-        learning_stats = None
-
         if (
             execution_result.attempted_transactions > 0
             and safety_decision.action.startswith(
@@ -336,8 +305,8 @@ class RecoveryOrchestrator:
             recovery_outcome=recovery_outcome,
             final_status=recovery_outcome.outcome_status,
             explanation=(
-                "Recovery executed, verified, canary-evaluated, "
-                "and learning statistics updated."
+                "Recovery executed, verified, and "
+                "learning statistics updated."
             ),
             canary_decision=canary_result.decision,
             canary_reason=canary_result.reason,
