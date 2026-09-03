@@ -33,3 +33,9 @@ logs/
 
 # Jupyter
 .ipynb_checkpoints/
+
+# Local development backups
+*.backup
+app_backup.py
+app_before_orchestrator.py
+patch_orchestrator.py
