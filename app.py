@@ -1,6 +1,8 @@
 import json
+import textwrap
 import streamlit as st
 import pandas as pd
+from typing import Optional
 import sys
 from pathlib import Path
 
@@ -62,6 +64,40 @@ from src.tracking.financial_summary import (
     calculate_financial_summary,
     FinancialSummary,
 )
+
+from src.evaluation.evaluation_adapter import (
+    prepare_dashboard_evaluation_scorecard,
+)
+
+from src.demo import (
+    DemoRunner,
+    DemoRunResult,
+    DemoScenario,
+    CANONICAL_HAPPY_PATH,
+    DEFAULT_DEMO_CANDIDATES,
+    FAILURE_SAFETY_BLOCKED,
+    FAILURE_UNPROFITABLE_ROLLBACK,
+    get_demo_scenario,
+    list_demo_scenarios,
+    build_demo_view_model,
+    get_financial_display,
+    get_learning_display,
+    get_reevaluation_display,
+    get_closed_loop_learning_flow,
+    get_final_status_bar,
+    get_phase_css_class,
+    get_phase_icon,
+    PROVENANCE_OBSERVED,
+    PROVENANCE_THEORETICAL,
+    PROVENANCE_SIMULATED,
+    PROVENANCE_GOVERNED,
+    PROVENANCE_LEARNED,
+)
+
+from src.tracking.learning_view import (
+    LearningComparisonView,
+    build_learning_comparison,
+)
 # =========================================
 # BACKEND IMPORTS
 # =========================================
@@ -113,7 +149,7 @@ from src.live_reporting.event_simulator import (
 # =========================================
 
 st.set_page_config(
-    page_title="AI Payment Reliability Center",
+    page_title="RouteIQ — Intelligent Payment Route Recovery",
     page_icon="🛡️",
     layout="wide",
     initial_sidebar_state="expanded",
@@ -276,6 +312,72 @@ html, body, [class*="css"] {
     margin-bottom: 1rem;
 }
 
+.ai-card {
+    background: #ffffff;
+    border: 1px solid #cbd5e1;
+    border-left: 4px solid #0284c7;
+    border-radius: 10px;
+    padding: 1.25rem 1.4rem;
+    margin-bottom: 1rem;
+    box-shadow: 0 1px 3px rgba(16, 24, 40, 0.04);
+}
+
+.ai-source {
+    font-size: 0.75rem;
+    font-weight: 700;
+    color: #0284c7;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    margin-bottom: 6px;
+}
+
+.explanation-card {
+    background: #f8fafc;
+    border: 1px solid #e2e8f0;
+    border-radius: 8px;
+    padding: 0.85rem 1rem;
+    font-size: 0.85rem;
+    color: #334155;
+    margin: 0.75rem 0;
+    line-height: 1.5;
+}
+
+.recovery-card {
+    background: #ffffff;
+    border: 1px solid #e2e8f0;
+    border-radius: 10px;
+    padding: 1.25rem;
+    margin-bottom: 1rem;
+    box-shadow: 0 1px 3px rgba(16, 24, 40, 0.04);
+}
+
+.policy-recover {
+    background: #ffffff;
+    border: 1px solid #a7f3d0;
+    border-left: 4px solid #10b981;
+    border-radius: 10px;
+    padding: 1.25rem 1.4rem;
+    margin-bottom: 1rem;
+}
+
+.policy-escalate {
+    background: #ffffff;
+    border: 1px solid #fde68a;
+    border-left: 4px solid #f59e0b;
+    border-radius: 10px;
+    padding: 1.25rem 1.4rem;
+    margin-bottom: 1rem;
+}
+
+.policy-stop {
+    background: #ffffff;
+    border: 1px solid #fecaca;
+    border-left: 4px solid #ef4444;
+    border-radius: 10px;
+    padding: 1.25rem 1.4rem;
+    margin-bottom: 1rem;
+}
+
 /* Status Pills */
 .pill-green {
     background: #ecfdf5;
@@ -408,10 +510,79 @@ html, body, [class*="css"] {
     padding-top: 1.5rem;
     border-top: 1px solid #e2e8f0;
 }
+
+/* Demo Banner & Lifecycle */
+.demo-card {
+    background: #ffffff;
+    border: 1px solid #cbd5e1;
+    border-radius: 12px;
+    padding: 1.25rem 1.4rem;
+    margin-bottom: 1.5rem;
+    box-shadow: 0 2px 4px rgba(15, 23, 42, 0.05);
+}
+
+.lifecycle-flow {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 6px;
+    margin: 0.75rem 0 1rem 0;
+    padding: 10px 14px;
+    background: #0f172a;
+    border-radius: 8px;
+    border: 1px solid #334155;
+}
+
+.lifecycle-step {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    padding: 5px 9px;
+    border-radius: 6px;
+    font-size: 0.75rem;
+    font-weight: 700;
+    letter-spacing: 0.02em;
+}
+
+.step-success {
+    background: #064e3b;
+    color: #34d399;
+    border: 1px solid #059669;
+}
+
+.step-blocked {
+    background: #7f1d1d;
+    color: #f87171;
+    border: 1px solid #dc2626;
+}
+
+.step-warn {
+    background: #78350f;
+    color: #fbbf24;
+    border: 1px solid #d97706;
+}
+
+.step-pending {
+    background: #1e293b;
+    color: #64748b;
+    border: 1px solid #334155;
+}
+
+.lifecycle-sep {
+    color: #475569;
+    font-weight: 700;
+    font-size: 0.8rem;
+}
 </style>
 """,
     unsafe_allow_html=True,
 )
+
+
+def render_html(html_str: str) -> None:
+    """Render raw HTML safely without Markdown indentation or code-block artifacts."""
+    clean = "\n".join(line.lstrip() for line in html_str.splitlines()).strip()
+    st.markdown(clean, unsafe_allow_html=True)
 
 
 # =========================================
@@ -419,14 +590,13 @@ html, body, [class*="css"] {
 # =========================================
 
 with st.sidebar:
-    st.markdown(
+    render_html(
         """
-        <div style="font-size: 1.35rem; font-weight: 700; color: #0f172a; line-height: 1.15; margin-bottom: 2px;">
-            AI Payment<br><span style="color: #0284c7;">Reliability</span>
+        <div style="font-size: 1.45rem; font-weight: 800; color: #0f172a; line-height: 1.15; margin-bottom: 2px;">
+            Route<span style="color: #0284c7;">IQ</span>
         </div>
-        <div style="font-size: 0.8rem; color: #64748b; margin-bottom: 12px;">Reliability & Recovery Console</div>
-        """,
-        unsafe_allow_html=True,
+        <div style="font-size: 0.8rem; color: #64748b; margin-bottom: 12px;">Payment Reliability & Recovery Engine</div>
+        """
     )
 
     st.markdown("**Demo Scenario**")
@@ -437,6 +607,12 @@ with st.sidebar:
         label_visibility="collapsed",
         help="Counterfactual validation scenarios without live payment execution.",
     )
+
+    if st.session_state.get("current_scenario") != scenario_name:
+        st.session_state["current_scenario"] = scenario_name
+        st.session_state["batch_result"] = None
+        st.session_state["evaluation_scorecard"] = None
+        st.session_state["demo_run_result"] = None
 
     selected_scenario = get_scenario(scenario_name)
     scenario_view = scenario_summary(scenario_name)
@@ -449,17 +625,20 @@ with st.sidebar:
     st.markdown(
         """
         **Navigation**
-        - [• Overview](#system-overview)
+        - [• End-to-End Demo](#end-to-end-recovery-demo)
+        - [• System Overview](#system-overview)
         - [• Decision Intelligence](#ai-decision-intelligence)
+        - [• Safety Control](#safety-control)
         - [• Recovery Control](#recovery-control)
-        - [• Learning](#recovery-learning)
+        - [• Continuous Learning](#recovery-learning)
+        - [• System Evaluation](#system-evaluation)
         - [• Audit Trail](#recovery-audit-trail)
         """
     )
 
     st.markdown("---")
 
-    st.markdown(
+    render_html(
         """
         <div style="background: #f1f5f9; padding: 10px 12px; border-radius: 8px; font-size: 0.8rem;">
             <div style="color: #0284c7; font-weight: 700;">⚙ SIMULATION MODE</div>
@@ -467,8 +646,7 @@ with st.sidebar:
             <div style="color: #334155;">Safety: <b>Enforced</b></div>
             <div style="color: #64748b; font-size: 0.72rem; margin-top: 4px;">No live routing performed</div>
         </div>
-        """,
-        unsafe_allow_html=True,
+        """
     )
 
 
@@ -476,20 +654,19 @@ with st.sidebar:
 # HEADER
 # =========================================
 
-st.markdown(
+render_html(
     """
     <div class="header-bar">
         <div>
-            <div class="product-title">AI PAYMENT RELIABILITY CENTER</div>
-            <div class="product-subtitle">Detect revenue risk. Decide safely. Recover within bounds.</div>
+            <div class="product-title">ROUTEIQ — PAYMENT RELIABILITY CENTER</div>
+            <div class="product-subtitle">Detect revenue risk · Decide safely · Recover within bounds · Learn continuously</div>
         </div>
         <div style="display: flex; flex-direction: column; align-items: flex-end; gap: 4px;">
             <span class="badge-sim">⚙ SIMULATION MODE</span>
             <span class="badge-status">⚙ System Operational</span>
         </div>
     </div>
-    """,
-    unsafe_allow_html=True,
+    """
 )
 
 
@@ -561,12 +738,582 @@ if audit_log is not None and not audit_log.empty:
 incident = detect_incident(transactions)
 impact = calculate_revenue_impact(transactions, incident) if incident is not None else None
 
+
+# =========================================
+# END-TO-END RECOVERY DEMO (JUDGE-READY)
+# =========================================
+
+st.markdown('<div id="end-to-end-recovery-demo"></div>', unsafe_allow_html=True)
+render_html(
+    """
+    <div style="display: flex; justify-content: space-between; align-items: baseline; margin-bottom: 0.2rem;">
+        <div class="section-title" style="margin-bottom: 0; font-size: 1.35rem; font-weight: 800;">🚀 END-TO-END RECOVERY DEMO</div>
+        <span class="badge-sim">Deterministic Judge Flow</span>
+    </div>
+    <div style="font-size: 0.86rem; font-weight: 600; color: #475569; margin-bottom: 0.85rem; letter-spacing: 0.02em;">
+        Detect → Quantify → Decide → Safety-gate → Recover → Verify → Learn → Adapt
+    </div>
+    """
+)
+
+with st.container():
+    demo_ctrl_col1, demo_ctrl_col2, demo_ctrl_col3 = st.columns([2.5, 1.2, 1.0])
+
+    with demo_ctrl_col1:
+        demo_scenario_options = {
+            "canonical_happy_path": "Canonical: Degradation → AI Decision → Canary Verified → Learning",
+            "safety_blocked": "Safety Blocked: Critical Exposure (> ₹500k Policy Threshold)",
+            "unprofitable_rollback": "Circuit Breaker: Unprofitable Recovery → Auto Rollback",
+        }
+        selected_demo_id = st.selectbox(
+            "Demo Scenario Selector",
+            options=list(demo_scenario_options.keys()),
+            format_func=lambda sid: demo_scenario_options[sid],
+            key="demo_scenario_selector",
+            label_visibility="collapsed",
+        )
+
+    with demo_ctrl_col2:
+        run_demo_clicked = st.button(
+            "▶ Run End-to-End Demo",
+            type="primary",
+            use_container_width=True,
+            help="Run the deterministic demo using the existing domain pipeline.",
+        )
+
+    with demo_ctrl_col3:
+        reset_demo_clicked = st.button(
+            "↻ Reset Demo",
+            use_container_width=True,
+            help="Clear demo outputs. Does not delete historical persistent learning.",
+        )
+
+    if reset_demo_clicked:
+        st.session_state["demo_run_result"] = None
+        st.session_state["batch_result"] = None
+        st.session_state["evaluation_scorecard"] = None
+        st.session_state["evaluation_scorecard_view"] = None
+        st.session_state["demo_reset_flag"] = True
+        st.rerun()
+
+    if (
+        run_demo_clicked
+        or (st.session_state.get("active_demo_scenario") != selected_demo_id)
+        or (st.session_state.get("demo_run_result") is None and not st.session_state.get("demo_reset_flag", False))
+    ):
+        st.session_state["active_demo_scenario"] = selected_demo_id
+        st.session_state["demo_reset_flag"] = False
+        scenario_obj = get_demo_scenario(selected_demo_id)
+        runner = DemoRunner()
+        demo_res = runner.run(scenario_obj)
+
+        st.session_state["demo_run_result"] = demo_res
+        st.session_state["batch_result"] = demo_res.batch_result
+        st.session_state["evaluation_scorecard"] = demo_res.scorecard
+        st.session_state["evaluation_scorecard_view"] = demo_res.scorecard_view
+
+    demo_result: Optional[DemoRunResult] = st.session_state.get("demo_run_result")
+
+    # 1. Lifecycle Bar (Rendered in all states for immediate judge orientation)
+    if demo_result is not None:
+        safe_allowed = demo_result.safety_decision.allowed if demo_result.safety_decision else False
+        succ_rec = demo_result.batch_result.get("successful_recoveries", 0) if demo_result.batch_result else 0
+        final_st = demo_result.final_status
+        has_learn = demo_result.learning_evidence is not None
+        has_lift = demo_result.score_delta > 0 or demo_result.ranking_changed
+
+        recover_step_cls = "step-success" if succ_rec > 0 else ("step-blocked" if not safe_allowed else "step-warn")
+        recover_step_icon = "✓" if succ_rec > 0 else ("🚫" if not safe_allowed else "⚠️")
+
+        verify_step_cls = "step-success" if final_st == "RECOVERED" else ("step-blocked" if not safe_allowed else "step-warn")
+        verify_step_icon = "✓" if final_st == "RECOVERED" else ("🚫" if not safe_allowed else "⚠️")
+
+        render_html(
+            f"""
+            <div class="lifecycle-flow">
+                <div class="lifecycle-step step-success">✓ 1. DETECT</div>
+                <div class="lifecycle-sep">→</div>
+                <div class="lifecycle-step step-success">✓ 2. QUANTIFY</div>
+                <div class="lifecycle-sep">→</div>
+                <div class="lifecycle-step step-success">✓ 3. DECIDE</div>
+                <div class="lifecycle-sep">→</div>
+                <div class="lifecycle-step {'step-success' if safe_allowed else 'step-blocked'}">
+                    {'✓' if safe_allowed else '🚫'} 4. SAFETY
+                </div>
+                <div class="lifecycle-sep">→</div>
+                <div class="lifecycle-step {recover_step_cls}">
+                    {recover_step_icon} 5. RECOVER
+                </div>
+                <div class="lifecycle-sep">→</div>
+                <div class="lifecycle-step {verify_step_cls}">
+                    {verify_step_icon} 6. VERIFY
+                </div>
+                <div class="lifecycle-sep">→</div>
+                <div class="lifecycle-step {'step-success' if has_learn else 'step-pending'}">
+                    {'✓' if has_learn else '○'} 7. LEARN
+                </div>
+                <div class="lifecycle-sep">→</div>
+                <div class="lifecycle-step {'step-success' if has_lift else 'step-pending'}">
+                    {'✓' if has_lift else '○'} 8. ADAPT
+                </div>
+            </div>
+            """
+        )
+
+        # 2. Executive 5-KPI Summary Cards
+        k1, k2, k3, k4, k5 = st.columns(5)
+
+        with k1:
+            st.metric(
+                label="Incident",
+                value=f"{demo_result.incident.severity}",
+                delta=f"-{demo_result.incident.degradation_pp:.1f} pp drop",
+                delta_color="inverse",
+                help=f"Observed Success Rate: {demo_result.incident.current_success_rate:.1%} vs {demo_result.incident.baseline_success_rate:.1%} baseline (OBSERVED)",
+            )
+            st.caption("**OBSERVED** · Route degradation")
+
+        with k2:
+            st.metric(
+                label="Revenue at Risk",
+                value=f"₹{demo_result.revenue_impact.revenue_at_risk:,.0f}",
+                delta=f"-{demo_result.revenue_impact.excess_failures:.0f} excess fails",
+                delta_color="inverse",
+                help="Authoritative revenue at risk calculated by IncidentRevenueCalculator (COUNTERFACTUAL)",
+            )
+            st.caption("**THEORETICAL** · Pre-intervention risk")
+
+        with k3:
+            safe_pill = "pill-green" if safe_allowed else "pill-red"
+            safe_text = "ALLOWED" if safe_allowed else "BLOCKED"
+            render_html(
+                f"""
+                <div>
+                    <div style="font-size: 0.82rem; color: #64748b; font-weight: 600; margin-bottom: 4px;">SAFETY GATE</div>
+                    <div style="margin-top: 2px;"><span class="{safe_pill}" style="font-size: 0.95rem; font-weight: 700; padding: 4px 10px;">{safe_text}</span></div>
+                    <div style="font-size: 0.75rem; color: #64748b; margin-top: 6px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;" title="{demo_result.safety_decision.reason if demo_result.safety_decision else 'Evaluated'}">
+                        {demo_result.safety_decision.action if demo_result.safety_decision else 'EVALUATED'}
+                    </div>
+                </div>
+                """
+            )
+            st.caption("**GOVERNED** · Deterministic policy")
+
+        with k4:
+            net_rec = demo_result.batch_result.get("net_recovered_value", 0.0) if demo_result.batch_result else 0.0
+            roi_val = demo_result.scorecard.recovery_roi if demo_result.scorecard else 0.0
+            roi_str = f"{roi_val:.1f}x ROI" if roi_val and roi_val > 0 else "0.0x ROI"
+
+            if demo_result.batch_result and safe_allowed:
+                st.metric(
+                    label="Recovery",
+                    value=f"₹{net_rec:,.0f} net",
+                    delta=f"{succ_rec}/{demo_result.batch_result.get('attempted_transactions', 0)} rec · {roi_str}",
+                    delta_color="normal",
+                    help="Simulated net value = Recovered Amount - Execution Cost (SIMULATED)",
+                )
+            else:
+                st.metric(
+                    label="Recovery",
+                    value="Not executed",
+                    delta="Blocked / 0 attempted",
+                    delta_color="off",
+                    help="Recovery batch was not executed due to safety controls.",
+                )
+            st.caption("**SIMULATED** · Bounded canary")
+
+        with k5:
+            lift_str = f"{demo_result.score_delta:+.4f}" if demo_result.score_delta else ("Recorded" if demo_result.learning_evidence else "None")
+            lift_delta = f"Top: {demo_result.top_route_after}" if demo_result.top_route_after else "No change"
+            st.metric(
+                label="Learning",
+                value=lift_str,
+                delta=lift_delta,
+                delta_color="normal" if demo_result.score_delta and demo_result.score_delta > 0 else "off",
+                help="Route score update derived from verified recovery evidence (LEARNED)",
+            )
+            st.caption(f"**{PROVENANCE_LEARNED}** · Bayesian lift")
+
+        # Summary banner
+        if demo_result.is_success:
+            st.success(f"✅ {demo_result.summary_message}")
+        elif not safe_allowed:
+            st.error(f"🛡️ {demo_result.summary_message}")
+        else:
+            st.warning(f"⚠️ {demo_result.summary_message}")
+
+        # ---------------------------------------------------------------
+        # JUDGE DEMO — DETAILED PHASE CARDS
+        # ---------------------------------------------------------------
+        _vm = build_demo_view_model(demo_result)
+        _fin = get_financial_display(demo_result)
+        _learn = get_learning_display(demo_result)
+        _reeval = get_reevaluation_display(demo_result)
+        _flow = get_closed_loop_learning_flow(demo_result)
+        _status_bar = get_final_status_bar(demo_result)
+
+        st.markdown("---")
+        render_html(
+            """
+            <div style="display:flex; justify-content:space-between; align-items:baseline; margin-bottom:0.25rem;">
+                <div style="font-size:1.05rem; font-weight:800; color:#0f172a;">📋 Payment Reliability Demo</div>
+                <span class="badge-sim">Deterministic simulation of incident detection, governed recovery, and closed-loop learning.</span>
+            </div>
+            """
+        )
+
+        # ---- Phase 1+2: Incident ----------------------------------------
+        inc_sev = _vm.get("severity", "UNKNOWN")
+        inc_pill = "pill-red" if inc_sev == "CRITICAL" else "pill-amber"
+        render_html(
+            f"""
+            <div class="incident-card-critical" id="judge-incident-card">
+                <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:8px;">
+                    <div style="font-size:0.78rem; font-weight:700; color:#64748b; letter-spacing:0.04em; text-transform:uppercase;">INCIDENT DETECTED</div>
+                    <span class="{inc_pill}">SEVERITY: {inc_sev}</span>
+                </div>
+                <div style="display:grid; grid-template-columns:repeat(6,1fr); gap:10px; padding-top:10px; border-top:1px solid #f1f5f9;">
+                    <div>
+                        <div style="font-size:0.72rem; color:#64748b;">Observed Success Rate</div>
+                        <div style="font-size:1.05rem; font-weight:700; color:#dc2626;">{_vm['observed_success_rate'] * 100:.1f}%</div>
+                        <div style="font-size:0.65rem; color:#94a3b8;">{PROVENANCE_OBSERVED}</div>
+                    </div>
+                    <div>
+                        <div style="font-size:0.72rem; color:#64748b;">Baseline</div>
+                        <div style="font-size:1.05rem; font-weight:600; color:#334155;">{_vm['baseline_success_rate'] * 100:.1f}%</div>
+                        <div style="font-size:0.65rem; color:#94a3b8;">{PROVENANCE_OBSERVED}</div>
+                    </div>
+                    <div>
+                        <div style="font-size:0.72rem; color:#64748b;">Degradation</div>
+                        <div style="font-size:1.05rem; font-weight:700; color:#dc2626;">−{_vm['degradation_pp']:.1f} pp</div>
+                        <div style="font-size:0.65rem; color:#94a3b8;">{PROVENANCE_OBSERVED}</div>
+                    </div>
+                    <div>
+                        <div style="font-size:0.72rem; color:#64748b;">Transactions</div>
+                        <div style="font-size:1.05rem; font-weight:600; color:#0f172a;">{_vm['transactions_observed']:,}</div>
+                        <div style="font-size:0.65rem; color:#94a3b8;">{PROVENANCE_OBSERVED}</div>
+                    </div>
+                    <div>
+                        <div style="font-size:0.72rem; color:#64748b;">Revenue at Risk</div>
+                        <div style="font-size:1.05rem; font-weight:700; color:#dc2626;">{_fin.get('revenue_at_risk','₹0.00')}</div>
+                        <div style="font-size:0.65rem; color:#94a3b8;">{PROVENANCE_THEORETICAL}</div>
+                    </div>
+                    <div>
+                        <div style="font-size:0.72rem; color:#64748b;">Provenance</div>
+                        <div style="font-size:0.72rem; font-weight:600; color:#475569;">Simulated telemetry</div>
+                        <div style="font-size:0.65rem; color:#94a3b8;">IncidentIntelligence</div>
+                    </div>
+                </div>
+                <div style="margin-top:8px; font-size:0.70rem; color:#94a3b8;">Revenue at Risk: THEORETICAL / COUNTERFACTUAL — modeled financial estimate, not money lost.</div>
+            </div>
+            """
+        )
+
+        # ---- Phase 3+4: AI Decision + Safety Gate -----------------------
+        dcol1, dcol2 = st.columns(2)
+        with dcol1:
+            d_conf_pct = _vm['confidence'] * 100
+            loss_red = _vm.get('loss_reduction_pct', 0.0)
+            render_html(
+                f"""
+                <div class="decision-card" id="judge-decision-card">
+                    <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:8px;">
+                        <div style="font-size:0.78rem; font-weight:700; color:#0284c7; text-transform:uppercase;">AI ROUTE DECISION</div>
+                        <span class="pill-blue">Confidence: {d_conf_pct:.1f}%</span>
+                    </div>
+                    <div style="font-size:1.05rem; font-weight:700; color:#0f172a; margin-bottom:8px;">{_vm['selected_action']}</div>
+                    <div style="display:grid; grid-template-columns:repeat(3,1fr); gap:8px; padding-top:8px; border-top:1px solid #f1f5f9;">
+                        <div>
+                            <div style="font-size:0.70rem; color:#64748b;">Expected Loss Before</div>
+                            <div style="font-size:0.90rem; font-weight:600; color:#64748b;">₹{_vm['expected_loss_before']:,.0f}</div>
+                            <div style="font-size:0.60rem; color:#94a3b8;">{PROVENANCE_THEORETICAL}</div>
+                        </div>
+                        <div>
+                            <div style="font-size:0.70rem; color:#64748b;">Expected Loss After</div>
+                            <div style="font-size:0.90rem; font-weight:600; color:#059669;">₹{_vm['expected_loss_after']:,.0f}</div>
+                            <div style="font-size:0.60rem; color:#94a3b8;">{PROVENANCE_THEORETICAL}</div>
+                        </div>
+                        <div>
+                            <div style="font-size:0.70rem; color:#64748b;">Loss Reduction</div>
+                            <div style="font-size:0.90rem; font-weight:700; color:#059669;">{loss_red:.1f}%</div>
+                            <div style="font-size:0.60rem; color:#94a3b8;">{PROVENANCE_THEORETICAL}</div>
+                        </div>
+                    </div>
+                    <div style="margin-top:8px; font-size:0.68rem; color:#94a3b8;">*Modeled counterfactual projections — IncidentDecisionEngine</div>
+                </div>
+                """
+            )
+
+        with dcol2:
+            s_allowed = _vm.get('safety_allowed', False)
+            s_review = _vm.get('safety_human_review', False)
+            if s_allowed:
+                s_bg, s_border, s_color, s_badge = "#f0fdf4", "#bbf7d0", "#15803d", "pill-green"
+                s_status_text = "Safety policy: ALLOWED"
+            elif s_review:
+                s_bg, s_border, s_color, s_badge = "#fffbeb", "#fde68a", "#b45309", "pill-amber"
+                s_status_text = "Safety policy: HUMAN REVIEW REQUIRED"
+            else:
+                s_bg, s_border, s_color, s_badge = "#fef2f2", "#fecaca", "#b91c1c", "pill-red"
+                s_status_text = "Safety policy: BLOCKED"
+            human_review_txt = "Yes — Required" if s_review else "Not required"
+            render_html(
+                f"""
+                <div style="background:{s_bg}; border:1px solid {s_border}; border-left:4px solid {s_color}; border-radius:10px; padding:1.25rem 1.4rem; height:100%;" id="judge-safety-card">
+                    <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:8px;">
+                        <div style="font-size:0.78rem; font-weight:700; color:{s_color}; text-transform:uppercase;">SAFETY GATE</div>
+                        <span class="{s_badge}">{"ALLOWED" if s_allowed else ("REVIEW" if s_review else "BLOCKED")}</span>
+                    </div>
+                    <div style="font-size:1.0rem; font-weight:800; color:{s_color}; margin-bottom:6px;">{s_status_text}</div>
+                    <div style="font-size:0.82rem; font-weight:600; color:#334155; margin-bottom:6px;">Human Review: {human_review_txt}</div>
+                    <div style="font-size:0.76rem; color:#475569; line-height:1.4; margin-bottom:8px;">{_vm.get('safety_reason', '')}</div>
+                    <div style="font-size:0.68rem; color:#94a3b8; border-top:1px solid {s_border}; padding-top:6px;">Simulation only · SafetyController · {PROVENANCE_GOVERNED}</div>
+                </div>
+                """
+            )
+
+        # ---- Phase 5+6: Canary + Recovery Outcome -----------------------
+        cc1, cc2 = st.columns(2)
+        with cc1:
+            canary_dec = _vm.get('canary_decision', 'N/A')
+            canary_pill = "pill-green" if canary_dec == "EXPAND" else ("pill-amber" if canary_dec in ("STOP", "ESCALATE") else "pill-blue")
+            render_html(
+                f"""
+                <div class="recovery-card" id="judge-canary-card">
+                    <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:8px;">
+                        <div style="font-size:0.78rem; font-weight:700; color:#64748b; text-transform:uppercase;">BOUNDED CANARY</div>
+                        <span class="{canary_pill}">{canary_dec}</span>
+                    </div>
+                    <div style="display:grid; grid-template-columns:repeat(3,1fr); gap:8px; padding-top:8px; border-top:1px solid #f1f5f9;">
+                        <div>
+                            <div style="font-size:0.70rem; color:#64748b;">Eligible</div>
+                            <div style="font-size:1.0rem; font-weight:700; color:#0f172a;">{_vm['eligible_transactions']}</div>
+                        </div>
+                        <div>
+                            <div style="font-size:0.70rem; color:#64748b;">Attempted</div>
+                            <div style="font-size:1.0rem; font-weight:700; color:#0284c7;">{_vm['attempted_transactions']}</div>
+                        </div>
+                        <div>
+                            <div style="font-size:0.70rem; color:#64748b;">Recovered</div>
+                            <div style="font-size:1.0rem; font-weight:700; color:#059669;">{_vm['successful_recoveries']}</div>
+                        </div>
+                        <div>
+                            <div style="font-size:0.70rem; color:#64748b;">Failed</div>
+                            <div style="font-size:1.0rem; font-weight:600; color:#dc2626;">{_vm['failed_recoveries']}</div>
+                        </div>
+                        <div>
+                            <div style="font-size:0.70rem; color:#64748b;">Canary Rate</div>
+                            <div style="font-size:1.0rem; font-weight:700; color:#059669;">{_vm['canary_recovery_rate'] * 100:.1f}%</div>
+                        </div>
+                        <div>
+                            <div style="font-size:0.70rem; color:#64748b;">Decision</div>
+                            <div style="font-size:0.90rem; font-weight:700; color:#0f172a;">{canary_dec}</div>
+                        </div>
+                    </div>
+                    <div style="margin-top:8px; font-size:0.68rem; color:#94a3b8;">{PROVENANCE_SIMULATED} · BoundedRecoveryExecutor</div>
+                </div>
+                """
+            )
+
+        with cc2:
+            rb = _vm.get('rollback_required', False)
+            fin_st = _vm.get('final_status', 'PENDING')
+            rec_bg = "#f0fdf4" if fin_st == "RECOVERED" else ("#fef2f2" if rb else "#f8fafc")
+            rec_border = "#bbf7d0" if fin_st == "RECOVERED" else ("#fecaca" if rb else "#e2e8f0")
+            render_html(
+                f"""
+                <div style="background:{rec_bg}; border:1px solid {rec_border}; border-radius:10px; padding:1.25rem; height:100%;" id="judge-recovery-card">
+                    <div style="font-size:0.78rem; font-weight:700; color:#64748b; text-transform:uppercase; margin-bottom:8px;">RECOVERY OUTCOME</div>
+                    <div style="display:grid; grid-template-columns:repeat(2,1fr); gap:8px; padding-top:8px; border-top:1px solid {rec_border}; margin-bottom:8px;">
+                        <div>
+                            <div style="font-size:0.70rem; color:#64748b;">Attempted Amount</div>
+                            <div style="font-size:0.88rem; font-weight:600; color:#0f172a;">{_fin.get('attempted_amount','₹0.00')}</div>
+                            <div style="font-size:0.60rem; color:#94a3b8;">[{PROVENANCE_SIMULATED}]</div>
+                        </div>
+                        <div>
+                            <div style="font-size:0.70rem; color:#64748b;">Gross Recovered</div>
+                            <div style="font-size:0.88rem; font-weight:600; color:#059669;">{_fin.get('gross_recovered','₹0.00')}</div>
+                            <div style="font-size:0.60rem; color:#94a3b8;">[{PROVENANCE_SIMULATED}]</div>
+                        </div>
+                        <div>
+                            <div style="font-size:0.70rem; color:#64748b;">Execution Cost</div>
+                            <div style="font-size:0.88rem; font-weight:600; color:#64748b;">{_fin.get('execution_cost','₹0.00')}</div>
+                            <div style="font-size:0.60rem; color:#94a3b8;">[{PROVENANCE_SIMULATED}]</div>
+                        </div>
+                        <div>
+                            <div style="font-size:0.70rem; color:#64748b;">ROI</div>
+                            <div style="font-size:0.88rem; font-weight:700; color:#0284c7;">{_fin.get('recovery_roi_str','N/A')}</div>
+                            <div style="font-size:0.60rem; color:#94a3b8;">[{PROVENANCE_SIMULATED}]</div>
+                        </div>
+                    </div>
+                    <div style="font-size:0.90rem; font-weight:700; color:#0f172a; margin-bottom:4px;">
+                        Simulated Net Recovered Value: {_fin.get('net_recovered_value','₹0.00')} [{PROVENANCE_SIMULATED}]
+                    </div>
+                    <div style="font-size:0.78rem; color:#475569;">Recovery Rate: {_fin.get('recovery_rate_pct','0.0%')} &nbsp;|&nbsp; Final Status: <b>{fin_st}</b></div>
+                    <div style="margin-top:8px; font-size:0.68rem; color:#94a3b8;">All execution values are SIMULATED · Bounded sandbox only</div>
+                </div>
+                """
+            )
+
+        # ---- Phase 7+8: Closed-Loop Learning Visualization (Milestone 7) ---
+        dec_changed_color = "#b45309" if _flow['decision_changed'] else "#059669"
+        render_html(
+            f"""
+            <div class="fintech-card" id="judge-learning-card" style="padding:1.25rem;">
+                <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:12px;">
+                    <div style="font-size:0.82rem; font-weight:700; color:#7c3aed; letter-spacing:0.04em; text-transform:uppercase;">
+                        🔄 CLOSED-LOOP LEARNING VISUALIZATION
+                    </div>
+                    <span class="pill-purple">[{PROVENANCE_LEARNED}]</span>
+                </div>
+
+                <div style="display:grid; grid-template-columns:1fr auto 1.15fr auto 1fr auto 1.15fr; gap:8px; align-items:center;">
+                    <!-- Stage 1: BEFORE LEARNING -->
+                    <div style="background:#ffffff; border:1px solid #e2e8f0; border-radius:8px; padding:10px;">
+                        <div style="font-size:0.68rem; font-weight:700; color:#64748b; text-transform:uppercase; margin-bottom:4px;">BEFORE LEARNING</div>
+                        <div style="font-size:0.78rem; font-weight:600; color:#0f172a; margin-bottom:2px;">Route: {_flow['route_before']}</div>
+                        <div style="font-size:0.78rem; font-family:monospace; color:#475569;">Score: <b>{_flow['score_before']}</b></div>
+                    </div>
+
+                    <div style="font-size:1.1rem; font-weight:700; color:#94a3b8; text-align:center;">→</div>
+
+                    <!-- Stage 2: VERIFIED RECOVERY EVIDENCE -->
+                    <div style="background:#ffffff; border:1px solid #e2e8f0; border-radius:8px; padding:10px;">
+                        <div style="font-size:0.68rem; font-weight:700; color:#0284c7; text-transform:uppercase; margin-bottom:4px;">VERIFIED EVIDENCE</div>
+                        <div style="font-size:0.74rem; color:#475569;">Attempts: <b style="color:#0f172a;">{_flow['attempts']}</b> &nbsp;|&nbsp; Recoveries: <b style="color:#059669;">{_flow['recoveries']}</b></div>
+                        <div style="font-size:0.74rem; color:#475569; margin-top:2px;">Confidence: <b style="color:#0284c7;">{_flow['evidence_confidence']}</b></div>
+                    </div>
+
+                    <div style="font-size:1.1rem; font-weight:700; color:#94a3b8; text-align:center;">→</div>
+
+                    <!-- Stage 3: AFTER LEARNING -->
+                    <div style="background:#ffffff; border:1px solid #e2e8f0; border-radius:8px; padding:10px;">
+                        <div style="font-size:0.68rem; font-weight:700; color:#059669; text-transform:uppercase; margin-bottom:4px;">AFTER LEARNING</div>
+                        <div style="font-size:0.78rem; font-weight:600; color:#0f172a; margin-bottom:2px;">Route: {_flow['route_after']}</div>
+                        <div style="font-size:0.78rem; font-family:monospace; color:#059669;">Score: <b>{_flow['score_after']}</b></div>
+                        <div style="font-size:0.72rem; color:#059669; font-weight:600; margin-top:1px;">Delta: {_flow['score_delta']}</div>
+                    </div>
+
+                    <div style="font-size:1.1rem; font-weight:700; color:#94a3b8; text-align:center;">→</div>
+
+                    <!-- Stage 4: RE-EVALUATION -->
+                    <div style="background:#ffffff; border:1px solid #e2e8f0; border-radius:8px; padding:10px;">
+                        <div style="font-size:0.68rem; font-weight:700; color:#0369a1; text-transform:uppercase; margin-bottom:4px;">RE-EVALUATION</div>
+                        <div style="font-size:0.74rem; color:#475569;">Top Before: <span style="font-weight:600; color:#0f172a;">{_flow['top_route_before']}</span></div>
+                        <div style="font-size:0.74rem; color:#475569;">Top After: <span style="font-weight:600; color:#059669;">{_flow['top_route_after']}</span></div>
+                        <div style="font-size:0.74rem; color:#475569; margin-top:2px;">Decision Changed: <b style="color:{dec_changed_color};">{_flow['decision_changed_label']}</b></div>
+                    </div>
+                </div>
+                <div style="margin-top:10px; font-size:0.68rem; color:#94a3b8; border-top:1px solid #f1f5f9; padding-top:6px;">
+                    {PROVENANCE_LEARNED} · RecoveryLearningEngine evidence updates Bayesian route scoring and feeds subsequent decision engine cycles.
+                </div>
+            </div>
+            """
+        )
+
+        # ---- Final Status Bar -------------------------------------------
+        render_html("<div style='margin-top:1rem;'></div>")
+        status_bar_html = '<div class="lifecycle-flow" id="judge-status-bar">'
+        first_item = True
+        for stage_label, phase_status, phase_display in _status_bar:
+            css_cls = get_phase_css_class(phase_status)
+            icon = get_phase_icon(phase_status)
+            if not first_item:
+                status_bar_html += '<div class="lifecycle-sep">→</div>'
+            status_bar_html += (
+                f'<div class="lifecycle-step {css_cls}">'
+                f'{icon} {stage_label}<br>'
+                f'<span style="font-size:0.68rem; font-weight:400;">{phase_display}</span>'
+                f'</div>'
+            )
+            first_item = False
+        status_bar_html += '</div>'
+        render_html(status_bar_html)
+
+        # ---- Provenance Legend ------------------------------------------
+        with st.expander("ℹ️ Metric Provenance Legend", expanded=False):
+            render_html(
+                f"""
+                <div style="display:grid; grid-template-columns:repeat(auto-fit, minmax(180px,1fr)); gap:10px; font-size:0.78rem;">
+                    <div style="background:#f8fafc; border:1px solid #e2e8f0; border-radius:8px; padding:10px;">
+                        <div style="font-weight:700; color:#475569; margin-bottom:4px;">{PROVENANCE_OBSERVED}</div>
+                        <div style="color:#64748b;">Measured from simulated payment telemetry</div>
+                    </div>
+                    <div style="background:#fef3c7; border:1px solid #fde68a; border-radius:8px; padding:10px;">
+                        <div style="font-weight:700; color:#92400e; margin-bottom:4px;">{PROVENANCE_THEORETICAL}</div>
+                        <div style="color:#64748b;">Modeled financial/risk estimate — counterfactual</div>
+                    </div>
+                    <div style="background:#e0e7ff; border:1px solid #c7d2fe; border-radius:8px; padding:10px;">
+                        <div style="font-weight:700; color:#3730a3; margin-bottom:4px;">{PROVENANCE_SIMULATED}</div>
+                        <div style="color:#64748b;">Bounded sandbox recovery execution</div>
+                    </div>
+                    <div style="background:#f0fdf4; border:1px solid #bbf7d0; border-radius:8px; padding:10px;">
+                        <div style="font-weight:700; color:#15803d; margin-bottom:4px;">{PROVENANCE_GOVERNED}</div>
+                        <div style="color:#64748b;">Safety and evaluation — deterministic policy</div>
+                    </div>
+                    <div style="background:#fdf4ff; border:1px solid #e9d5ff; border-radius:8px; padding:10px;">
+                        <div style="font-weight:700; color:#7c3aed; margin-bottom:4px;">{PROVENANCE_LEARNED}</div>
+                        <div style="color:#64748b;">Evidence from verified simulated outcomes</div>
+                    </div>
+                </div>
+                """
+            )
+
+        # ---- Step-by-Step Lifecycle Trace (technical detail) ------------
+        with st.expander("🔍 View Step-by-Step Lifecycle Execution Trace & Subsystem Provenance", expanded=False):
+            trace_rows = []
+            for ev in demo_result.lifecycle_events:
+                trace_rows.append({
+                    "Step": f"{ev.step_number}. {ev.stage_id}",
+                    "Title": ev.title,
+                    "Subsystem": ev.provenance,
+                    "Status": ev.status,
+                    "Detail": ev.detail,
+                })
+            st.dataframe(pd.DataFrame(trace_rows), use_container_width=True, hide_index=True)
+
+    else:
+        render_html(
+            """
+            <div class="lifecycle-flow">
+                <div class="lifecycle-step step-pending">○ 1. DETECT</div>
+                <div class="lifecycle-sep">→</div>
+                <div class="lifecycle-step step-pending">○ 2. QUANTIFY</div>
+                <div class="lifecycle-sep">→</div>
+                <div class="lifecycle-step step-pending">○ 3. DECIDE</div>
+                <div class="lifecycle-sep">→</div>
+                <div class="lifecycle-step step-pending">○ 4. SAFETY</div>
+                <div class="lifecycle-sep">→</div>
+                <div class="lifecycle-step step-pending">○ 5. RECOVER</div>
+                <div class="lifecycle-sep">→</div>
+                <div class="lifecycle-step step-pending">○ 6. VERIFY</div>
+                <div class="lifecycle-sep">→</div>
+                <div class="lifecycle-step step-pending">○ 7. LEARN</div>
+                <div class="lifecycle-sep">→</div>
+                <div class="lifecycle-step step-pending">○ 8. ADAPT</div>
+            </div>
+            <div style="background: #f8fafc; border: 1px dashed #cbd5e1; border-radius: 8px; padding: 12px 16px; margin-top: 0.5rem; text-align: center;">
+                <span style="font-size: 0.85rem; color: #475569;">
+                    ℹ️ Select a scenario above and click <b>▶ Run End-to-End Demo</b> to execute the complete 8-stage recovery loop in real-time.
+                </span>
+            </div>
+            """
+        )
+
+st.markdown("<hr style='margin: 1.5rem 0 1.25rem 0; border: none; border-top: 1px solid #e2e8f0;'>", unsafe_allow_html=True)
+
+
 # =========================================
 # SECTION 1 — SYSTEM OVERVIEW
 # =========================================
 
 st.markdown('<div id="system-overview"></div>', unsafe_allow_html=True)
 st.markdown('<div class="section-title">📊 System Overview</div>', unsafe_allow_html=True)
+st.caption(
+    "An AI-driven payment reliability layer that detects route degradation, "
+    "quantifies revenue exposure, selects bounded recovery actions, "
+    "verifies outcomes, and learns from verified recovery evidence."
+)
 
 kpi1, kpi2, kpi3, kpi4 = st.columns(4)
 
@@ -652,7 +1399,7 @@ else:
     )
     pill_style = "pill-red" if is_critical else "pill-amber"
 
-    st.markdown(
+    render_html(
         f"""
         <div class="{card_border_class}">
             <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
@@ -687,8 +1434,7 @@ else:
                 </div>
             </div>
         </div>
-        """,
-        unsafe_allow_html=True,
+        """
     )
 
     with st.expander("🔎 Incident Window & Historical Breakdown", expanded=False):
@@ -705,109 +1451,49 @@ else:
     # INCIDENT TIMELINE
     # =====================================
 
-    st.markdown(
-        '<div class="section-title">'
-        '📈 Incident Timeline'
-        '</div>',
-        unsafe_allow_html=True
-    )
-
-
     timeline = transactions.copy()
-
-    timeline["timestamp"] = pd.to_datetime(
-        timeline["timestamp"],
-        format="mixed"
-    )
-
-    timeline["hour"] = (
-        timeline["timestamp"]
-        .dt.floor("1h")
-    )
-
+    timeline["timestamp"] = pd.to_datetime(timeline["timestamp"], format="mixed")
+    timeline["hour"] = timeline["timestamp"].dt.floor("1h")
 
     hourly = (
-        timeline
-        .groupby("hour")
+        timeline.groupby("hour")
         .agg(
-            transactions=(
-                "transaction_id",
-                "count"
-            ),
-
-            successful=(
-                "status",
-                lambda x:
-                (x == "SUCCESS").sum()
-            )
+            transactions=("transaction_id", "count"),
+            successful=("status", lambda x: (x == "SUCCESS").sum()),
         )
         .reset_index()
     )
+    hourly["success_rate"] = (hourly["successful"] / hourly["transactions"]) * 100
+    hourly = hourly.sort_values("hour")
 
+    with st.expander("📈 View Hourly Incident Degradation Timeline Chart", expanded=False):
+        timeline_start = incident_start - pd.Timedelta(hours=12)
+        timeline_end = incident_start + pd.Timedelta(hours=12)
 
-    hourly["success_rate"] = (
-        hourly["successful"]
-        / hourly["transactions"]
-        * 100
-    )
+        focused_hourly = hourly[
+            (hourly["hour"] >= timeline_start) & (hourly["hour"] <= timeline_end)
+        ].copy()
 
+        if not focused_hourly.empty:
+            st.line_chart(
+                focused_hourly.set_index("hour")["success_rate"],
+                height=260,
+                use_container_width=True,
+            )
+        else:
+            st.line_chart(
+                hourly.set_index("hour")["success_rate"],
+                height=260,
+                use_container_width=True,
+            )
 
-    hourly = hourly.sort_values(
-        "hour"
-    )
-
-
-    # Focus the timeline around the detected incident so
-    # the degradation is immediately visible during a demo.
-    timeline_start = incident_start - pd.Timedelta(hours=12)
-    timeline_end = incident_start + pd.Timedelta(hours=12)
-
-    focused_hourly = hourly[
-        (hourly["hour"] >= timeline_start)
-        &
-        (hourly["hour"] <= timeline_end)
-    ].copy()
-
-    if not focused_hourly.empty:
-
-        st.line_chart(
-            focused_hourly.set_index("hour")[
-                "success_rate"
-            ],
-            height=300,
-            use_container_width=True
-        )
-
-    else:
-
-        st.line_chart(
-            hourly.set_index("hour")[
-                "success_rate"
-            ],
-            height=300,
-            use_container_width=True
-        )
-
-
-    incident_row = hourly[
-        hourly["hour"] == incident_start
-    ]
-
-
-    if not incident_row.empty:
-
-        incident_rate = float(
-            incident_row.iloc[0][
-                "success_rate"
-            ]
-        )
-
-        st.error(
-            f"🔴 Incident detected at "
-            f"{incident_start.strftime('%Y-%m-%d %H:%M')} — "
-            f"overall system success rate during this hour: "
-            f"{incident_rate:.2f}%"
-        )
+        incident_row = hourly[hourly["hour"] == incident_start]
+        if not incident_row.empty:
+            incident_rate = float(incident_row.iloc[0]["success_rate"])
+            st.caption(
+                f"Incident window detected at {incident_start.strftime('%Y-%m-%d %H:%M')} — "
+                f"hourly system success rate: {incident_rate:.2f}%."
+            )
 
 
     # =====================================
@@ -1029,101 +1715,25 @@ the observed transaction evidence.
     # =====================================
 
     if ai_diagnosis:
+        with st.expander("🔍 Detailed AI Evidence & Investigation Recommendations", expanded=False):
+            st.markdown("**Incident Evidence Observed:**")
+            for evidence in ai_diagnosis.get("evidence", []):
+                st.markdown(f"• {evidence}")
 
-        st.markdown(
-            "### AI Evidence"
-        )
+            st.markdown("**Recommended Advisory Investigation:**")
+            for item in ai_diagnosis.get("recommended_investigation", []):
+                st.markdown(f"• {item}")
 
-
-        for evidence in ai_diagnosis[
-            "evidence"
-        ]:
-
-            st.markdown(
-                f"• {evidence}"
+            st.caption(
+                "AI diagnosis is advisory. "
+                "Recovery authorization remains strictly controlled "
+                "by the deterministic policy engine."
             )
 
 
-        st.markdown(
-            "### Recommended Investigation"
-        )
-
-
-        for item in ai_diagnosis[
-            "recommended_investigation"
-        ]:
-
-            st.markdown(
-                f"• {item}"
-            )
-
-
-        st.caption(
-            "AI diagnosis is advisory. "
-            "Recovery authorization remains controlled "
-            "by the policy engine."
-        )
-
-
-    # =====================================
-    # BUSINESS IMPACT
-    # =====================================
-
-    st.divider()
-
-
-    st.markdown(
-        '<div class="section-title">'
-        '💰 Business Impact'
-        '</div>',
-        unsafe_allow_html=True
-    )
-
-
-    impact = calculate_revenue_impact(
-        transactions,
-        incident
-    )
-
-
-    if impact:
-
-        col1, col2, col3 = st.columns(3)
-
-
-        with col1:
-
-            st.metric(
-                "Actual Failures",
-                f"{impact['actual_failures']:,}"
-            )
-
-
-        with col2:
-
-            st.metric(
-                "Excess Failures",
-                f"{impact['excess_failures']:.1f}"
-            )
-
-
-        with col3:
-
-            st.metric(
-                "Revenue at Risk",
-                f"₹{impact['revenue_at_risk']:,.0f}"
-            )
-
-# =====================================
-# DECISION INTELLIGENCE
-# =====================================
-
-st.markdown(
-    '<div class="section-title">'
-    '🧠 Decision Intelligence'
-    '</div>',
-    unsafe_allow_html=True
-)
+    # Ensure authoritative impact object is present for downstream engines
+    if impact is None and incident is not None:
+        impact = calculate_revenue_impact(transactions, incident)
 
 historical_candidates = transactions.copy()
 historical_candidates["timestamp"] = pd.to_datetime(
@@ -1308,22 +1918,6 @@ if intelligence_result:
     # RECOVERY RECOMMENDATION & POLICY
     # =====================================
 
-    # =====================================
-
-    st.markdown(
-        '<div class="section-title">'
-        '⚡ Recovery Recommendation'
-        '</div>',
-        unsafe_allow_html=True
-    )
-
-    st.info(
-        "🤖 Gemini provides advisory incident diagnosis. "
-        "Recovery selection is performed by the deterministic recovery engine, "
-        "and authorization is enforced by the policy engine."
-    )
-
-
     recovery = recommend_recovery(
         transactions,
         incident
@@ -1457,7 +2051,6 @@ if intelligence_result:
             )
 
         elif scenario_guardrail == "ROLLBACK":
-
             policy_result = dict(policy_result)
 
             policy_result["decision"] = "ROLLBACK"
@@ -1468,539 +2061,185 @@ if intelligence_result:
             )
 
     # =====================================
-    # RECOVERY INFORMATION
+    # RECOVERY INFORMATION & ALTERNATIVE ROUTE ANALYSIS
     # =====================================
 
-    if recovery:
+    with st.expander("🏦 View Historical Alternative Route Health & Policy Checks", expanded=False):
+        if recovery:
+            simulation_preview = simulate_recovery(transactions, incident, recovery)
 
-        simulation_preview = (
-            simulate_recovery(
-                transactions,
-                incident,
-                recovery
-            )
-        )
+            st.markdown('<div class="recovery-card">', unsafe_allow_html=True)
+            col1, col2, col3 = st.columns(3)
+            with col1:
+                st.metric("Current Bank", affected_bank)
+            with col2:
+                st.metric("Proposed Bank", recovery["alternative_bank"])
+            with col3:
+                st.metric("Historical Success", f"{recovery['alternative_success_rate'] * 100:.2f}%")
 
+            expected_improvement = (
+                recovery["alternative_success_rate"] - incident["success_rate"]
+            ) * 100
 
-        st.markdown(
-            '<div class="recovery-card">',
-            unsafe_allow_html=True
-        )
-
-
-        col1, col2, col3 = st.columns(3)
-
-
-        with col1:
-
-            st.metric(
-                "Current Bank",
-                affected_bank
-            )
-
-
-        with col2:
-
-            st.metric(
-                "Proposed Bank",
-                recovery[
-                    "alternative_bank"
-                ]
+            st.markdown(
+                f"""
+                <div class="explanation-card">
+                <b>Why {recovery['alternative_bank']}?</b><br><br>
+                The recovery engine evaluated historical <b>{payment_method} + {device_type}</b> traffic and identified
+                <b>{recovery['alternative_bank']}</b> as the strongest eligible alternative.<br><br>
+                <b>Current route:</b> {affected_bank}<br>
+                <b>Alternative route:</b> {recovery['alternative_bank']}<br>
+                <b>Current success rate:</b> {incident_success:.2f}%<br>
+                <b>Historical alternative success rate:</b> {recovery['alternative_success_rate'] * 100:.2f}%<br>
+                <b>Expected improvement:</b> {expected_improvement:.2f} percentage points<br><br>
+                The recommendation is subject to all policy safety checks before any simulated recovery action is permitted.
+                </div>
+                """,
+                unsafe_allow_html=True,
             )
 
-
-        with col3:
-
-            st.metric(
-                "Historical Success",
-                f"{recovery['alternative_success_rate'] * 100:.2f}%"
-            )
-
-
-        expected_improvement = (
-            recovery["alternative_success_rate"]
-            - incident["success_rate"]
-        ) * 100
-
-        st.markdown(
-            f"""
-<div class="explanation-card">
-
-<b>Why {recovery['alternative_bank']}?</b>
-
-<br><br>
-
-The recovery engine evaluated historical
-<b>{payment_method} + {device_type}</b>
-traffic and identified
-<b>{recovery['alternative_bank']}</b>
-as the strongest eligible alternative.
-
-<br><br>
-
-<b>Current route:</b>
-{affected_bank}
-<br>
-
-<b>Alternative route:</b>
-{recovery['alternative_bank']}
-<br>
-
-<b>Current success rate:</b>
-{incident_success:.2f}%
-<br>
-
-<b>Historical alternative success rate:</b>
-{recovery['alternative_success_rate'] * 100:.2f}%
-<br>
-
-<b>Expected improvement:</b>
-{expected_improvement:.2f} percentage points
-
-<br><br>
-
-The recommendation is subject to all
-policy safety checks before any simulated
-recovery action is permitted.
-
-</div>
-""",
-            unsafe_allow_html=True
-        )
-
-
-        if simulation_preview:
-
-            c1, c2 = st.columns(2)
-
-
-            with c1:
-
-                st.metric(
-                    "Potential Additional Successes",
-                    f"+{simulation_preview['additional_successes']}"
-                )
-
-
-            with c2:
-
-                st.metric(
-                    "Estimated Recoverable Value",
-                    f"₹{simulation_preview['estimated_recovered_value']:,.2f}"
-                )
-
-
-        st.markdown(
-            '</div>',
-            unsafe_allow_html=True
-        )
-
-
-    else:
-
-        st.warning(
-            "No suitable recovery recommendation is currently available."
-        )
-
-
-    # =====================================
-    # POLICY DISPLAY
-    # =====================================
-
-    st.markdown(
-        '<div class="section-title">'
-        '🛡️ Recovery Policy Gate'
-        '</div>',
-        unsafe_allow_html=True
-    )
-
-
-    decision = policy_result[
-        "decision"
-    ]
-
-
-    if decision == "RECOVER":
-
-        st.markdown(
-            f"""
-<div class="policy-recover">
-
-<h3>🟢 RECOVER — Approved</h3>
-
-<b>Decision:</b> {decision}
-
-<br><br>
-
-<b>Policy reason:</b><br>
-{policy_result['reason']}
-
-</div>
-""",
-            unsafe_allow_html=True
-        )
-
-
-    elif decision == "ESCALATE":
-
-        st.markdown(
-            f"""
-<div class="policy-escalate">
-
-<h3>🟡 ESCALATE — Human Review Required</h3>
-
-<b>Decision:</b> {decision}
-
-<br><br>
-
-<b>Policy reason:</b><br>
-{policy_result['reason']}
-
-</div>
-""",
-            unsafe_allow_html=True
-        )
-
-
-    elif decision == "ROLLBACK":
-
-        st.markdown(
-            f"""
-<div class="policy-stop">
-
-<h3>↩️ ROLLBACK — Recovery Reversed</h3>
-
-<b>Decision:</b> {decision}
-
-<br><br>
-
-<b>Policy reason:</b><br>
-{policy_result['reason']}
-
-</div>
-""",
-            unsafe_allow_html=True
-        )
-
-
-    elif decision == "CONTINUE":
-
-        st.success(
-            f"🟢 **CONTINUE — No Recovery Required**\n\n"
-            f"{policy_result['reason']}"
-        )
-
-
-    else:
-
-        st.markdown(
-            f"""
-<div class="policy-stop">
-
-<h3>🔴 STOP — Recovery Blocked</h3>
-
-<b>Decision:</b> {decision}
-
-<br><br>
-
-<b>Policy reason:</b><br>
-{policy_result['reason']}
-
-</div>
-""",
-            unsafe_allow_html=True
-        )
-
-
-    # =====================================
-    # POLICY CHECKS
-    # =====================================
-
-    if policy_result["checks"]:
-
-        st.markdown(
-            "### Policy Checks"
-        )
-
-
-        policy_rows = []
-
-
-        for check in policy_result[
-            "checks"
-        ]:
-
-            policy_rows.append({
-                "Status":
-                    "✅ PASS"
-                    if check["passed"]
-                    else
-                    "❌ FAIL",
-
-                "Policy Check":
-                    check["check"],
-
-                "Value":
-                    check["value"],
-
-                "Threshold":
-                    check["threshold"]
-            })
-
-
-        policy_df = pd.DataFrame(
-            policy_rows
-        )
-
-
-        st.dataframe(
-            policy_df,
-            use_container_width=True,
-            hide_index=True
-        )
-
-
-        passed_checks = sum(
-            check["passed"]
-            for check in policy_result[
-                "checks"
-            ]
-        )
-
-
-        total_checks = len(
-            policy_result["checks"]
-        )
-
-
-        st.caption(
-            f"{passed_checks}/{total_checks} "
-            f"policy checks passed."
-        )
-
-
-    # =====================================
-    # RECOMMENDED ACTION
-    # =====================================
-
-    if recovery:
+        decision = policy_result["decision"]
 
         if decision == "RECOVER":
-
-            st.success(
-                f"⚡ Approved action: Prefer "
-                f"{recovery['alternative_bank']} "
-                f"for eligible "
-                f"{payment_method} + "
-                f"{device_type} traffic."
+            st.markdown(
+                f"""
+                <div class="policy-recover">
+                <h3>🟢 RECOVER — Approved</h3>
+                <b>Decision:</b> {decision}<br><br>
+                <b>Policy reason:</b><br>{policy_result['reason']}
+                </div>
+                """,
+                unsafe_allow_html=True,
             )
-
-
         elif decision == "ESCALATE":
-
-            st.warning(
-                "⚠️ Automated recovery is not approved. "
-                "Human review is required before routing changes."
+            st.markdown(
+                f"""
+                <div class="policy-escalate">
+                <h3>🟡 ESCALATE — Human Review Required</h3>
+                <b>Decision:</b> {decision}<br><br>
+                <b>Policy reason:</b><br>{policy_result['reason']}
+                </div>
+                """,
+                unsafe_allow_html=True,
             )
-
-
         elif decision == "ROLLBACK":
-
-            st.error(
-                "↩️ Recovery is blocked because the simulated "
-                "alternative route breached its guardrail."
+            st.markdown(
+                f"""
+                <div class="policy-stop">
+                <h3>↩️ ROLLBACK — Recovery Reversed</h3>
+                <b>Decision:</b> {decision}<br><br>
+                <b>Policy reason:</b><br>{policy_result['reason']}
+                </div>
+                """,
+                unsafe_allow_html=True,
             )
-
-
         elif decision == "CONTINUE":
-
-            st.success(
-                "🟢 No automated recovery is required for this scenario."
-            )
-
-
+            st.success(f"🟢 **CONTINUE — No Recovery Required**\n\n{policy_result['reason']}")
         else:
-
-            st.error(
-                "🛑 Automated recovery is blocked "
-                "by the policy engine."
+            st.markdown(
+                f"""
+                <div class="policy-stop">
+                <h3>🔴 STOP — Recovery Blocked</h3>
+                <b>Decision:</b> {decision}<br><br>
+                <b>Policy reason:</b><br>{policy_result['reason']}
+                </div>
+                """,
+                unsafe_allow_html=True,
             )
 
+        if policy_result["checks"]:
+            st.markdown("### Policy Checks")
+            policy_rows = []
+            for check in policy_result["checks"]:
+                policy_rows.append({
+                    "Status": "✅ PASS" if check["passed"] else "❌ FAIL",
+                    "Policy Check": check["check"],
+                    "Value": check["value"],
+                    "Threshold": check["threshold"],
+                })
+            policy_df = pd.DataFrame(policy_rows)
+            st.dataframe(policy_df, use_container_width=True, hide_index=True)
+            passed_checks = sum(check["passed"] for check in policy_result["checks"])
+            total_checks = len(policy_result["checks"])
+            st.caption(f"{passed_checks}/{total_checks} policy checks passed.")
 
-    # =====================================
-    # ALTERNATIVE ROUTE ANALYSIS
-    # =====================================
-
-    st.markdown(
-        '<div class="section-title">'
-        '🏦 Alternative Route Analysis'
-        '</div>',
-        unsafe_allow_html=True
-    )
-
-
-    historical = transactions[
-        ~(
-            (transactions["timestamp"] >= incident_start)
-            &
-            (transactions["timestamp"] < incident_end)
-        )
-    ].copy()
-
-
-    route_data = historical[
-        (historical["payment_method"]
-         == payment_method)
-        &
-        (historical["device_type"]
-         == device_type)
-    ].copy()
-
-
-    route_comparison = (
-        route_data
-        .groupby("bank")
-        .agg(
-            transactions=(
-                "transaction_id",
-                "count"
-            ),
-
-            successful=(
-                "status",
-                lambda x:
-                (x == "SUCCESS").sum()
-            ),
-
-            failed=(
-                "status",
-                lambda x:
-                (x == "FAILED").sum()
+        # Alternative Route Analysis
+        historical = transactions[
+            ~(
+                (transactions["timestamp"] >= incident_start)
+                & (transactions["timestamp"] < incident_end)
             )
-        )
-        .reset_index()
-    )
+        ].copy()
 
-
-    if not route_comparison.empty:
-
-        route_comparison["success_rate"] = (
-            route_comparison["successful"]
-            / route_comparison["transactions"]
-            * 100
-        )
-
+        route_data = historical[
+            (historical["payment_method"] == payment_method)
+            & (historical["device_type"] == device_type)
+        ].copy()
 
         route_comparison = (
-            route_comparison[
-                route_comparison["transactions"]
-                >= 100
-            ]
-            .copy()
-        )
-
-
-        route_comparison = (
-            route_comparison
-            .sort_values(
-                "success_rate",
-                ascending=False
+            route_data.groupby("bank")
+            .agg(
+                transactions=("transaction_id", "count"),
+                successful=("status", lambda x: (x == "SUCCESS").sum()),
+                failed=("status", lambda x: (x == "FAILED").sum()),
             )
+            .reset_index()
         )
 
-
-        def get_route_status(bank):
-
-            if bank == affected_bank:
-
-                return "🔴 Degraded"
-
-
-            if (
-                recovery
-                and bank
-                == recovery[
-                    "alternative_bank"
-                ]
-            ):
-
-                if decision == "RECOVER":
-
-                    return "🟢 Recommended"
-
-                elif decision == "ESCALATE":
-
-                    return "🟡 Proposed"
-
-                else:
-
-                    return "⚪ Blocked"
-
-
-            return "Normal"
-
-
-        route_comparison[
-            "status"
-        ] = (
-            route_comparison[
-                "bank"
-            ].apply(
-                get_route_status
+        if not route_comparison.empty:
+            route_comparison["success_rate"] = (
+                route_comparison["successful"] / route_comparison["transactions"] * 100
             )
-        )
+            route_comparison = route_comparison[route_comparison["transactions"] >= 100].copy()
+            route_comparison = route_comparison.sort_values("success_rate", ascending=False)
 
+            def get_route_status(bank):
+                if bank == affected_bank:
+                    return "🔴 Degraded"
+                if recovery and bank == recovery["alternative_bank"]:
+                    if decision == "RECOVER":
+                        return "🟢 Recommended"
+                    elif decision == "ESCALATE":
+                        return "🟡 Proposed"
+                    else:
+                        return "⚪ Blocked"
+                return "Normal"
 
-        display_routes = (
-            route_comparison.rename(
+            route_comparison["status"] = route_comparison["bank"].apply(get_route_status)
+            display_routes = route_comparison.rename(
                 columns={
-                    "bank":
-                        "Bank",
-
-                    "transactions":
-                        "Transactions",
-
-                    "successful":
-                        "Successful",
-
-                    "failed":
-                        "Failed",
-
-                    "success_rate":
-                        "Success Rate (%)",
-
-                    "status":
-                        "Route Status"
+                    "bank": "Bank",
+                    "transactions": "Transactions",
+                    "successful": "Successful",
+                    "failed": "Failed",
+                    "success_rate": "Success Rate (%)",
+                    "status": "Route Status",
                 }
             )
-        )
+            st.dataframe(
+                display_routes[
+                    ["Bank", "Transactions", "Successful", "Failed", "Success Rate (%)", "Route Status"]
+                ].style.format({"Success Rate (%)": "{:.2f}"}),
+                use_container_width=True,
+                hide_index=True,
+            )
+        else:
+            st.info("No sufficient historical alternative route data available.")
 
-
-        st.dataframe(
-            display_routes[
-                [
-                    "Bank",
-                    "Transactions",
-                    "Successful",
-                    "Failed",
-                    "Success Rate (%)",
-                    "Route Status"
-                ]
-            ].style.format({
-                "Success Rate (%)":
-                    "{:.2f}"
-            }),
-            use_container_width=True,
-            hide_index=True
-        )
-
-
-    else:
-
-        st.info(
-            "No sufficient historical alternative "
-            "route data available."
-        )
+            if recovery:
+                if decision == "RECOVER":
+                    st.success(
+                        f"⚡ Approved action: Prefer {recovery['alternative_bank']} "
+                        f"for eligible {payment_method} + {device_type} traffic."
+                    )
+                elif decision == "ESCALATE":
+                    st.warning("⚠️ Automated recovery is not approved. Human review is required before routing changes.")
+                elif decision == "ROLLBACK":
+                    st.error("↩️ Recovery is blocked because the simulated alternative route breached its guardrail.")
+                elif decision == "CONTINUE":
+                    st.success("🟢 No automated recovery is required for this scenario.")
+                else:
+                    st.error("🛑 Automated recovery is blocked by the policy engine.")
 
 
     # =====================================
@@ -2026,58 +2265,111 @@ recovery action is permitted.
     # ---------------------------------------------------------
     # Build Deterministic Decision Explanation
     # ---------------------------------------------------------
-    route_ctx = None
-    if intelligence_result and intelligence_result.ranked_routes:
-        best_candidate = intelligence_result.ranked_routes[0]
-        route_ctx = {
-            "route": getattr(best_candidate, "route", ""),
-            "observed_success_rate": getattr(best_candidate, "observed_success_rate", None),
-            "adjusted_success_rate": getattr(best_candidate, "adjusted_success_rate", None),
-            "evidence_confidence": getattr(best_candidate, "evidence_confidence", None),
-            "score": getattr(best_candidate, "score", None),
-            "explanation": getattr(best_candidate, "explanation", ""),
-        }
-    elif recovery:
-        route_ctx = {
-            "route": f"{payment_method} + {recovery.get('alternative_bank', '')} + {device_type}",
-            "observed_success_rate": recovery.get("alternative_success_rate"),
-            "adjusted_success_rate": recovery.get("simulated_success_rate"),
-            "explanation": recovery.get("reason", ""),
-        }
+    active_demo: Optional[DemoRunResult] = st.session_state.get("demo_run_result")
 
-    risk_assessment = None
-    loss_estimate = None
-    if intelligence_result:
+    if active_demo is not None and active_demo.incident is not None:
+        act_inc = active_demo.incident
+        act_rev = active_demo.revenue_impact
+        act_dec = active_demo.decision
+        act_dec_res = active_demo.decision_result
+        act_safe = active_demo.safety_decision
+
+        degradation_val = act_inc.degradation_pp
+        rev_risk_val = act_rev.revenue_at_risk if act_rev else (impact["revenue_at_risk"] if impact else 0.0)
+        loss_val = act_dec.expected_loss_before if act_dec else (act_rev.revenue_at_risk if act_rev else 0.0)
+
+        route_ctx = None
+        if act_dec_res and act_dec_res.ranked_routes:
+            best_candidate = act_dec_res.ranked_routes[0]
+            route_ctx = {
+                "route": getattr(best_candidate, "route", ""),
+                "observed_success_rate": getattr(best_candidate, "observed_success_rate", None),
+                "adjusted_success_rate": getattr(best_candidate, "adjusted_success_rate", None),
+                "evidence_confidence": getattr(best_candidate, "evidence_confidence", None),
+                "score": getattr(best_candidate, "score", None),
+                "explanation": getattr(best_candidate, "explanation", ""),
+            }
+
         loss_estimate = LossEstimate(
-            payment_id=f"inc_{incident.get('incident_id', 'unknown')}",
-            financial_exposure=intelligence_result.financial_exposure,
-            probability_of_loss=max(0.0, min(1.0, degradation / 100.0)) if degradation else 0.5,
-            expected_loss=intelligence_result.expected_loss,
+            payment_id=f"inc_{act_inc.route}",
+            financial_exposure=rev_risk_val,
+            probability_of_loss=max(0.0, min(1.0, degradation_val / 100.0)),
+            expected_loss=loss_val,
             currency="INR",
         )
         risk_assessment = RiskAssessment(
-            payment_id=f"inc_{incident.get('incident_id', 'unknown')}",
-            risk_score=round(min(1.0, degradation / 50.0), 2) if degradation else 0.5,
-            risk_level=intelligence_result.severity,
-            probability_of_loss=round(max(0.0, min(1.0, degradation / 100.0)), 2) if degradation else 0.5,
+            payment_id=f"inc_{act_inc.route}",
+            risk_score=round(min(1.0, degradation_val / 50.0), 2),
+            risk_level=act_inc.severity,
+            probability_of_loss=round(max(0.0, min(1.0, degradation_val / 100.0)), 2),
             risk_type="ROUTE_DEGRADATION",
-            reasons=[f"Observed degradation of {degradation:.1f} pp on route"],
+            reasons=[f"Observed degradation of {degradation_val:.1f} pp on route"],
         )
 
+        effective_decision = act_dec if act_dec else intelligence_decision
+        effective_safety = act_safe if act_safe else safety
+    else:
+        degradation_val = degradation
+        rev_risk_val = impact["revenue_at_risk"] if impact else 0.0
+        loss_val = intelligence_result.expected_loss if intelligence_result else 0.0
+
+        route_ctx = None
+        if intelligence_result and intelligence_result.ranked_routes:
+            best_candidate = intelligence_result.ranked_routes[0]
+            route_ctx = {
+                "route": getattr(best_candidate, "route", ""),
+                "observed_success_rate": getattr(best_candidate, "observed_success_rate", None),
+                "adjusted_success_rate": getattr(best_candidate, "adjusted_success_rate", None),
+                "evidence_confidence": getattr(best_candidate, "evidence_confidence", None),
+                "score": getattr(best_candidate, "score", None),
+                "explanation": getattr(best_candidate, "explanation", ""),
+            }
+        elif recovery:
+            route_ctx = {
+                "route": f"{payment_method} + {recovery.get('alternative_bank', '')} + {device_type}",
+                "observed_success_rate": recovery.get("alternative_success_rate"),
+                "adjusted_success_rate": recovery.get("simulated_success_rate"),
+                "explanation": recovery.get("reason", ""),
+            }
+
+        risk_assessment = None
+        loss_estimate = None
+        if intelligence_result:
+            loss_estimate = LossEstimate(
+                payment_id=f"inc_{incident.get('incident_id', 'unknown')}",
+                financial_exposure=intelligence_result.financial_exposure,
+                probability_of_loss=max(0.0, min(1.0, degradation / 100.0)) if degradation else 0.5,
+                expected_loss=intelligence_result.expected_loss,
+                currency="INR",
+            )
+            risk_assessment = RiskAssessment(
+                payment_id=f"inc_{incident.get('incident_id', 'unknown')}",
+                risk_score=round(min(1.0, degradation / 50.0), 2) if degradation else 0.5,
+                risk_level=intelligence_result.severity,
+                probability_of_loss=round(max(0.0, min(1.0, degradation / 100.0)), 2) if degradation else 0.5,
+                risk_type="ROUTE_DEGRADATION",
+                reasons=[f"Observed degradation of {degradation:.1f} pp on route"],
+            )
+
+        effective_decision = intelligence_decision
+        effective_safety = safety
+
     decision_explanation = build_decision_explanation(
-        decision=intelligence_decision,
+        decision=effective_decision,
         risk_assessment=risk_assessment,
         loss_estimate=loss_estimate,
-        safety_decision=safety,
+        safety_decision=effective_safety,
         route_context=route_ctx,
     )
 
-    # Incident Matters summary
-    if degradation >= 20 or (intelligence_result and intelligence_result.severity == "CRITICAL"):
-        incident_matters_text = "Critical route degradation caused elevated expected loss."
-    else:
-        loss_val = intelligence_result.expected_loss if intelligence_result else 0.0
-        incident_matters_text = f"Route degradation of {degradation:.1f} pp caused elevated expected loss of ₹{loss_val:,.0f}."
+    incident_matters_text = (
+        f"Route degradation of -{degradation_val:.1f} pp caused ₹{rev_risk_val:,.0f} revenue at risk "
+        f"with an estimated expected loss of ₹{loss_val:,.0f}."
+    )
+    loss_reduction = max(
+        0.0,
+        effective_decision.expected_loss_before - effective_decision.expected_loss_after,
+    ) if effective_decision else 0.0
 
     # Format Key Factors with visual icons
     def _format_kf_item(kf_text: str) -> tuple[str, str, str]:
@@ -2133,14 +2425,14 @@ recovery action is permitted.
     alternatives_html = "\n".join(alt_items_html) if alt_items_html else '<div style="color: #94a3b8; font-size: 0.82rem;">No alternative interventions evaluated.</div>'
 
     # Safety status styling
-    if safety.allowed:
+    if effective_safety.allowed:
         safety_badge_text = "✓ AUTOMATION ALLOWED"
-        safety_review_text = "Required" if safety.requires_human_review else "Not required"
+        safety_review_text = "Required" if effective_safety.requires_human_review else "Not required"
         safety_bg = "#f0fdf4"
         safety_border = "#bbf7d0"
         safety_header_color = "#15803d"
         safety_title_color = "#15803d"
-    elif safety.requires_human_review:
+    elif effective_safety.requires_human_review:
         safety_badge_text = "⚠ HUMAN REVIEW REQUIRED"
         safety_review_text = "Required"
         safety_bg = "#fffbeb"
@@ -2149,111 +2441,120 @@ recovery action is permitted.
         safety_title_color = "#b45309"
     else:
         safety_badge_text = "✕ AUTOMATION BLOCKED"
-        safety_review_text = "Required" if safety.requires_human_review else "Not required"
+        safety_review_text = "Required" if effective_safety.requires_human_review else "Not required"
         safety_bg = "#fef2f2"
         safety_border = "#fecaca"
         safety_header_color = "#b91c1c"
         safety_title_color = "#b91c1c"
 
-    conf_display = f"{intelligence_decision.confidence * 100:.2f}%"
+    conf_display = f"{effective_decision.confidence * 100:.2f}%" if effective_decision else "0.00%"
+    loss_before_val = effective_decision.expected_loss_before if effective_decision else loss_val
+    loss_after_val = effective_decision.expected_loss_after if effective_decision else 0.0
+    est_val = effective_decision.estimated_value if effective_decision else 0.0
 
-    st.markdown(
-        f"""
-        <div class="decision-card" style="border-left: 4px solid #0284c7; padding: 1.5rem; margin-bottom: 1.25rem;">
-            <!-- Brand / Header -->
-            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem;">
-                <div style="font-size: 1.15rem; font-weight: 800; color: #0f172a; display: flex; align-items: center; gap: 8px;">
-                    🤖 AI DECISION INTELLIGENCE
+    html_card = f"""
+<div class="decision-card" style="border-left: 4px solid #0284c7; padding: 1.5rem; margin-bottom: 1.25rem;">
+    <!-- Brand / Header -->
+    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem;">
+        <div style="font-size: 1.15rem; font-weight: 800; color: #0f172a; display: flex; align-items: center; gap: 8px;">
+            🤖 AI DECISION INTELLIGENCE
+        </div>
+        <span class="pill-blue" style="font-size: 0.76rem; font-weight: 700;">DETERMINISTIC & AUDITABLE</span>
+    </div>
+
+    <!-- WHY THIS INCIDENT MATTERS -->
+    <div style="background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 8px; padding: 12px 14px; margin-bottom: 14px;">
+        <div style="font-size: 0.72rem; font-weight: 700; color: #64748b; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 4px;">
+            WHY THIS INCIDENT MATTERS
+        </div>
+        <div style="font-size: 0.95rem; font-weight: 600; color: #0f172a;">
+            {incident_matters_text}
+        </div>
+    </div>
+
+    <!-- 2-COLUMN: ACTION + KEY FACTORS -->
+    <div style="display: grid; grid-template-columns: 1.2fr 1fr; gap: 16px; margin-bottom: 14px;">
+        <!-- Left: WHY THIS ACTION -->
+        <div style="background: #ffffff; border: 1px solid #e2e8f0; border-radius: 8px; padding: 14px;">
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px;">
+                <div style="font-size: 0.72rem; font-weight: 700; color: #0284c7; text-transform: uppercase; letter-spacing: 0.5px;">
+                    WHY THIS ACTION
                 </div>
-                <span class="pill-blue" style="font-size: 0.76rem; font-weight: 700;">DETERMINISTIC & AUDITABLE</span>
+                <span class="pill-blue">Confidence: {conf_display}</span>
             </div>
-
-            <!-- WHY THIS INCIDENT MATTERS -->
-            <div style="background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 8px; padding: 12px 14px; margin-bottom: 14px;">
-                <div style="font-size: 0.72rem; font-weight: 700; color: #64748b; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 4px;">
-                    WHY THIS INCIDENT MATTERS
-                </div>
-                <div style="font-size: 0.95rem; font-weight: 600; color: #0f172a;">
-                    {incident_matters_text}
-                </div>
+            <div style="font-size: 1.25rem; font-weight: 700; color: #0f172a; margin-bottom: 8px;">
+                {decision_explanation.selected_action}
             </div>
-
-            <!-- 2-COLUMN: ACTION + KEY FACTORS -->
-            <div style="display: grid; grid-template-columns: 1.2fr 1fr; gap: 16px; margin-bottom: 14px;">
-                <!-- Left: WHY THIS ACTION -->
-                <div style="background: #ffffff; border: 1px solid #e2e8f0; border-radius: 8px; padding: 14px;">
-                    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px;">
-                        <div style="font-size: 0.72rem; font-weight: 700; color: #0284c7; text-transform: uppercase; letter-spacing: 0.5px;">
-                            WHY THIS ACTION
-                        </div>
-                        <span class="pill-blue">Confidence: {conf_display}</span>
-                    </div>
-                    <div style="font-size: 1.25rem; font-weight: 700; color: #0f172a; margin-bottom: 8px;">
-                        {decision_explanation.selected_action}
-                    </div>
-                    <div style="font-size: 0.82rem; color: #475569; line-height: 1.45; margin-bottom: 10px;">
-                        {decision_explanation.selected_action_reason}
-                    </div>
-                    <div style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; padding-top: 8px; border-top: 1px solid #f1f5f9;">
-                        <div>
-                            <div style="font-size: 0.68rem; color: #64748b;">Loss Before</div>
-                            <div style="font-size: 0.88rem; font-weight: 600; color: #64748b;">₹{intelligence_decision.expected_loss_before:,.0f}</div>
-                        </div>
-                        <div>
-                            <div style="font-size: 0.68rem; color: #64748b;">Loss After</div>
-                            <div style="font-size: 0.88rem; font-weight: 600; color: #059669;">₹{intelligence_decision.expected_loss_after:,.0f}</div>
-                        </div>
-                        <div>
-                            <div style="font-size: 0.68rem; color: #64748b;">Estimated Recovery</div>
-                            <div style="font-size: 0.88rem; font-weight: 700; color: #0284c7;">₹{intelligence_decision.estimated_value:,.0f}*</div>
-                        </div>
-                    </div>
-                    <div style="font-size: 0.7rem; color: #94a3b8; margin-top: 6px;">*Simulated counterfactual projection</div>
+            <div style="font-size: 0.82rem; color: #475569; line-height: 1.45; margin-bottom: 10px;">
+                {decision_explanation.selected_action_reason}
+            </div>
+            <div style="display: grid; grid-template-columns: repeat(4, 1fr); gap: 6px; padding-top: 8px; border-top: 1px solid #f1f5f9;">
+                <div>
+                    <div style="font-size: 0.68rem; color: #64748b;">Loss Before</div>
+                    <div style="font-size: 0.85rem; font-weight: 600; color: #64748b;">₹{loss_before_val:,.0f}</div>
                 </div>
-
-                <!-- Right: KEY FACTORS -->
-                <div style="background: #ffffff; border: 1px solid #e2e8f0; border-radius: 8px; padding: 14px;">
-                    <div style="font-size: 0.72rem; font-weight: 700; color: #475569; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 10px;">
-                        KEY FACTORS
-                    </div>
-                    <div style="display: flex; flex-direction: column; gap: 6px;">
-                        {key_factors_html}
-                    </div>
+                <div>
+                    <div style="font-size: 0.68rem; color: #64748b;">Loss After</div>
+                    <div style="font-size: 0.85rem; font-weight: 600; color: #059669;">₹{loss_after_val:,.0f}</div>
+                </div>
+                <div>
+                    <div style="font-size: 0.68rem; color: #64748b;">Loss Reduction</div>
+                    <div style="font-size: 0.85rem; font-weight: 700; color: #059669;">₹{loss_reduction:,.0f}</div>
+                </div>
+                <div>
+                    <div style="font-size: 0.68rem; color: #64748b;">Est. Recovery</div>
+                    <div style="font-size: 0.85rem; font-weight: 700; color: #0284c7;">₹{est_val:,.0f}*</div>
                 </div>
             </div>
+            <div style="font-size: 0.7rem; color: #94a3b8; margin-top: 6px;">*Simulated counterfactual projection</div>
+        </div>
 
-            <!-- 2-COLUMN: ALTERNATIVES + SAFETY DECISION -->
-            <div style="display: grid; grid-template-columns: 1.2fr 1fr; gap: 16px;">
-                <!-- Left: ALTERNATIVES CONSIDERED -->
-                <div style="background: #ffffff; border: 1px solid #e2e8f0; border-radius: 8px; padding: 14px;">
-                    <div style="font-size: 0.72rem; font-weight: 700; color: #64748b; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 8px;">
-                        ALTERNATIVES CONSIDERED
-                    </div>
-                    <div style="display: flex; flex-direction: column; gap: 4px;">
-                        {alternatives_html}
-                    </div>
-                </div>
-
-                <!-- Right: 🛡 SAFETY DECISION -->
-                <div style="background: {safety_bg}; border: 1px solid {safety_border}; border-radius: 8px; padding: 14px;">
-                    <div style="font-size: 0.72rem; font-weight: 700; color: {safety_header_color}; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 8px; display: flex; align-items: center; gap: 6px;">
-                        🛡 SAFETY DECISION
-                    </div>
-                    <div style="font-size: 1.05rem; font-weight: 800; color: {safety_title_color}; margin-bottom: 4px;">
-                        {safety_badge_text}
-                    </div>
-                    <div style="font-size: 0.82rem; font-weight: 600; color: #334155; margin-bottom: 6px;">
-                        Human review: {safety_review_text}
-                    </div>
-                    <div style="font-size: 0.76rem; color: #475569; line-height: 1.4;">
-                        {safety.reason}
-                    </div>
-                </div>
+        <!-- Right: KEY FACTORS -->
+        <div style="background: #ffffff; border: 1px solid #e2e8f0; border-radius: 8px; padding: 14px;">
+            <div style="font-size: 0.72rem; font-weight: 700; color: #475569; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 10px;">
+                KEY FACTORS
+            </div>
+            <div style="display: flex; flex-direction: column; gap: 6px;">
+                {key_factors_html}
             </div>
         </div>
-        """,
-        unsafe_allow_html=True,
-    )
+    </div>
+
+    <!-- 2-COLUMN: ALTERNATIVES + SAFETY DECISION -->
+    <div style="display: grid; grid-template-columns: 1.2fr 1fr; gap: 16px;">
+        <!-- Left: ALTERNATIVES CONSIDERED -->
+        <div style="background: #ffffff; border: 1px solid #e2e8f0; border-radius: 8px; padding: 14px;">
+            <div style="font-size: 0.72rem; font-weight: 700; color: #64748b; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 8px;">
+                ALTERNATIVES CONSIDERED
+            </div>
+            <div style="display: flex; flex-direction: column; gap: 4px;">
+                {alternatives_html}
+            </div>
+        </div>
+
+        <!-- Right: 🛡 SAFETY DECISION -->
+        <div style="background: {safety_bg}; border: 1px solid {safety_border}; border-radius: 8px; padding: 14px;">
+            <div style="font-size: 0.72rem; font-weight: 700; color: {safety_header_color}; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 8px; display: flex; align-items: center; gap: 6px;">
+                🛡 SAFETY DECISION
+            </div>
+            <div style="font-size: 1.05rem; font-weight: 800; color: {safety_title_color}; margin-bottom: 4px;">
+                {safety_badge_text}
+            </div>
+            <div style="font-size: 0.82rem; font-weight: 600; color: #334155; margin-bottom: 6px;">
+                Human review: {safety_review_text}
+            </div>
+            <div style="font-size: 0.76rem; color: #475569; line-height: 1.4; margin-bottom: 6px;">
+                {effective_safety.reason}
+            </div>
+            <div style="font-size: 0.74rem; font-weight: 700; color: {safety_title_color};">
+                Recovery Execution: {'EXECUTED (SIMULATED)' if effective_safety.allowed else 'NOT EXECUTED'}
+            </div>
+        </div>
+    </div>
+</div>
+"""
+    clean_html_card = "\n".join(line.lstrip() for line in html_card.splitlines()).strip()
+    st.markdown(clean_html_card, unsafe_allow_html=True)
 
     if recovery:
         st.markdown("**Route Performance Comparison**")
@@ -2661,7 +2962,7 @@ recovery action is permitted.
 
     # 3. PERFORMANCE & ROI
     st.markdown("#### 3️⃣ Performance & Recovery ROI")
-    p_col1, p_col2, p_col3, p_col4 = st.columns(4)
+    p_col1, p_col2, p_col3, p_col4, p_col5 = st.columns(5)
 
     if fin_summary.has_executed and batch_result:
         with p_col1:
@@ -2678,25 +2979,36 @@ recovery action is permitted.
             )
         with p_col3:
             st.metric(
-                "Canary Decision",
+                "Canary",
                 batch_result.get("canary_decision", "NOT_APPLICABLE"),
                 help="Bounded canary evaluation result.",
             )
         with p_col4:
             st.metric(
-                "Guardrail Status",
+                "Guardrail",
                 batch_result.get("guardrail_decision", "NOT_RECORDED"),
                 help="Circuit breaker guardrail decision for route safety.",
+            )
+        with p_col5:
+            is_rb = batch_result.get("rollback_required", False)
+            st.metric(
+                "Rollback",
+                "TRIGGERED" if is_rb else "NONE",
+                delta="Reversed" if is_rb else "Safe",
+                delta_color="inverse" if is_rb else "normal",
+                help="Circuit breaker rollback status.",
             )
     else:
         with p_col1:
             st.metric("Recovery Rate", "Not executed")
         with p_col2:
-            st.metric("Recovery ROI", "ROI: N/A — no execution cost recorded")
+            st.metric("Recovery ROI", "N/A")
         with p_col3:
-            st.metric("Canary Decision", "PENDING")
+            st.metric("Canary", "PENDING")
         with p_col4:
-            st.metric("Guardrail Status", "PENDING")
+            st.metric("Guardrail", "PENDING")
+        with p_col5:
+            st.metric("Rollback", "NONE")
 
 
     # =========================================
@@ -2790,6 +3102,8 @@ recovery action is permitted.
         st.write("")
         if st.button("↻ Reset Stream", use_container_width=True):
             sim.reset()
+            st.session_state["batch_result"] = None
+            st.session_state["evaluation_scorecard"] = None
             st.rerun()
 
     st.markdown("</div>", unsafe_allow_html=True)
@@ -3029,7 +3343,7 @@ recovery action is permitted.
 
 
     # =========================================
-    # SECTION 6 — CONTINUOUS LEARNING
+    # SECTION 6 — RECOVERY LEARNING (CLOSED-LOOP INTELLIGENCE)
     # =========================================
 
     st.markdown('<div id="recovery-learning"></div>', unsafe_allow_html=True)
@@ -3037,65 +3351,438 @@ recovery action is permitted.
         '<div class="section-title">🧠 Recovery Learning</div>',
         unsafe_allow_html=True,
     )
+    st.caption(
+        "Closed-loop Bayesian route intelligence. Verified recovery evidence updates route confidence "
+        "to continuously adapt future routing decisions. "
+        "Mechanism: Verified evidence accumulation + Bayesian route scoring (no ML model retraining)."
+    )
 
     try:
-        history_loader = st.session_state.get("learning_history") or PersistentLearningHistory()
-        learned_routes = history_loader.load()
-        evidence_route_count = len(learned_routes) if learned_routes else 0
+        demo_res = st.session_state.get("demo_run_result")
+        batch_res = st.session_state.get("batch_result")
 
-        st.info(
-            f"Verified recovery evidence used in current route ranking: {evidence_route_count} routes"
+        # Resolve active candidate routes and verified learning context
+        if demo_res is not None and getattr(demo_res, "scenario", None) is not None:
+            active_candidates = demo_res.scenario.route_candidates
+            active_learning_ctx = (
+                demo_res.learning_evidence
+                or (batch_res.get("learning_stats") if batch_res else None)
+                or st.session_state.get("learning_history")
+                or PersistentLearningHistory()
+            )
+            active_target_route = demo_res.scenario.target_route
+        elif batch_res is not None and batch_res.get("learning_stats") is not None:
+            active_candidates = route_candidates if route_candidates else DEFAULT_DEMO_CANDIDATES
+            active_learning_ctx = batch_res.get("learning_stats")
+            active_target_route = getattr(batch_res["learning_stats"], "route", None)
+        else:
+            active_candidates = route_candidates if route_candidates else DEFAULT_DEMO_CANDIDATES
+            active_learning_ctx = st.session_state.get("learning_history") or PersistentLearningHistory()
+            active_target_route = None
+
+        learning_view: LearningComparisonView = build_learning_comparison(
+            route_candidates=active_candidates,
+            learning_context=active_learning_ctx,
+            target_route=active_target_route,
         )
 
-        if learned_routes:
-            l1, l2, l3, l4 = st.columns(4)
-            with l1:
-                st.metric("Learned Routes", f"{len(learned_routes)}")
-            with l2:
-                st.metric(
-                    "Total Attempts",
-                    f"{sum(r.attempts for r in learned_routes):,}",
-                )
-            with l3:
-                st.metric(
-                    "Verified Recoveries",
-                    f"{sum(r.recoveries for r in learned_routes):,}",
-                )
-            with l4:
-                st.metric(
-                    "Net Recovered Value",
-                    f"₹{sum(r.net_recovered_value for r in learned_routes):,.2f}",
-                )
+        # 1. Closed-Loop Lifecycle Stepper Flow
+        st.markdown(
+            """
+            <div style="display: flex; align-items: center; justify-content: space-between; background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 8px; padding: 10px 16px; margin-bottom: 16px; font-size: 0.8rem; font-weight: 600; color: #475569;">
+                <div style="display: flex; align-items: center; gap: 6px;">
+                    <span style="background: #e2e8f0; color: #334155; border-radius: 50%; width: 20px; height: 20px; display: inline-flex; align-items: center; justify-content: center; font-size: 0.7rem;">1</span>
+                    <span>Before Recovery (Baseline)</span>
+                </div>
+                <span style="color: #94a3b8;">→</span>
+                <div style="display: flex; align-items: center; gap: 6px;">
+                    <span style="background: #dbeafe; color: #1e40af; border-radius: 50%; width: 20px; height: 20px; display: inline-flex; align-items: center; justify-content: center; font-size: 0.7rem;">2</span>
+                    <span>Verified Recovery Evidence</span>
+                </div>
+                <span style="color: #94a3b8;">→</span>
+                <div style="display: flex; align-items: center; gap: 6px;">
+                    <span style="background: #e0e7ff; color: #4338ca; border-radius: 50%; width: 20px; height: 20px; display: inline-flex; align-items: center; justify-content: center; font-size: 0.7rem;">3</span>
+                    <span>Route Score Update</span>
+                </div>
+                <span style="color: #94a3b8;">→</span>
+                <div style="display: flex; align-items: center; gap: 6px;">
+                    <span style="background: #dcfce7; color: #166534; border-radius: 50%; width: 20px; height: 20px; display: inline-flex; align-items: center; justify-content: center; font-size: 0.7rem;">4</span>
+                    <span>Next Decision (Adapted)</span>
+                </div>
+            </div>
+            """,
+            unsafe_allow_html=True,
+        )
 
-            st.caption(
-                "Recovery outcomes continuously update route-level evidence used by future recovery decisions."
+        # 2. Executive KPI Cards
+        l_col1, l_col2, l_col3, l_col4 = st.columns(4)
+        with l_col1:
+            if learning_view.has_learning_evidence:
+                st.metric(
+                    "Verified Evidence",
+                    f"{learning_view.total_learned_recoveries:,} / {learning_view.total_learned_attempts:,}",
+                    delta=f"{learning_view.overall_recovery_rate * 100:.1f}% recovery rate",
+                    delta_color="normal",
+                    help="Recoveries verified by RecoveryOutcomeVerifier over bounded canary attempts.",
+                )
+            else:
+                st.metric(
+                    "Verified Evidence",
+                    "0 / 0",
+                    delta="Awaiting execution",
+                    delta_color="off",
+                    help="No verified recovery evidence recorded yet.",
+                )
+            st.caption(f"**{learning_view.learning_provenance}** • Verified recovery outcomes")
+
+        with l_col2:
+            if learning_view.has_learning_evidence:
+                st.metric(
+                    "Evidence Confidence",
+                    f"{learning_view.mean_evidence_confidence * 100:.1f}%",
+                    delta="Bayesian weight",
+                    delta_color="normal",
+                    help="Confidence weight calculated from sample size and outcome consistency.",
+                )
+            else:
+                st.metric(
+                    "Evidence Confidence",
+                    "N/A",
+                    delta="No samples",
+                    delta_color="off",
+                    help="Awaiting verified recovery evidence.",
+                )
+            st.caption(f"**{learning_view.learning_provenance}** • Evidence reliability weight")
+
+        with l_col3:
+            st.metric(
+                "Learning Score Lift",
+                learning_view.learning_score_lift_value,
+                delta="Bayesian route update" if learning_view.has_learning_evidence else "No lift measured",
+                delta_color="normal" if learning_view.has_learning_evidence and "+" in learning_view.learning_score_lift_value else "off",
+                help="Route score adjustment derived from verified recovery evidence.",
+            )
+            st.caption(f"**{learning_view.learning_provenance}** • Route score lift")
+
+        with l_col4:
+            adapt_pill = (
+                "pill-green" if learning_view.preferred_route_changed
+                else ("pill-blue" if learning_view.has_learning_evidence else "pill-amber")
+            )
+            st.markdown(
+                f"""
+                <div style="padding-top: 4px;">
+                    <div style="font-size: 0.8rem; color: #64748b; margin-bottom: 6px;">DECISION ADAPTATION</div>
+                    <div><span class="{adapt_pill}" style="font-size: 0.8rem; font-weight: 700;">{learning_view.adaptation_status}</span></div>
+                    <div style="font-size: 0.72rem; color: #64748b; margin-top: 6px;">**GOVERNED** • {learning_view.adaptation_summary}</div>
+                </div>
+                """,
+                unsafe_allow_html=True,
             )
 
-            learning_rows = []
-            for r in learned_routes:
-                learning_rows.append(
-                    {
-                        "Route": r.route,
-                        "Attempts": r.attempts,
-                        "Recoveries": r.recoveries,
-                        "Recovery Rate": f"{r.recovery_rate * 100:.1f}%",
-                        "Net Value": f"₹{r.net_recovered_value:,.2f}",
-                        "Evidence Confidence": f"{r.evidence_confidence * 100:.1f}%",
-                    }
-                )
-            st.dataframe(
-                pd.DataFrame(learning_rows),
-                use_container_width=True,
-                hide_index=True,
+        # Filter to relevant routes if route list is long
+        display_comparisons = learning_view.route_comparisons
+        if len(display_comparisons) > 5:
+            # Prioritize: top after, top before, target route, and route with highest delta
+            relevant_routes = {
+                learning_view.top_route_before,
+                learning_view.top_route_after,
+            }
+            if active_target_route:
+                relevant_routes.add(active_target_route)
+            # Add route with highest score delta
+            max_delta_item = max(display_comparisons, key=lambda x: abs(x.score_delta), default=None)
+            if max_delta_item:
+                relevant_routes.add(max_delta_item.route)
+            # Filter and supplement up to 4 routes
+            filtered = [c for c in display_comparisons if c.route in relevant_routes]
+            for c in display_comparisons:
+                if len(filtered) >= 4:
+                    break
+                if c not in filtered:
+                    filtered.append(c)
+            display_comparisons = filtered
+
+        # 3. Before / After Route Ranking Comparison
+        st.markdown(
+            """
+            <div style="font-size: 0.85rem; font-weight: 700; color: #334155; margin-top: 14px; margin-bottom: 8px; text-transform: uppercase; letter-spacing: 0.05em;">
+                Route Ranking: Before vs After Verified Recovery Evidence
+            </div>
+            """,
+            unsafe_allow_html=True,
+        )
+
+        r_col1, r_col2 = st.columns(2)
+
+        with r_col1:
+            st.markdown(
+                """
+                <div class="fintech-card" style="height: 100%;">
+                    <div style="font-size: 0.78rem; font-weight: 700; color: #64748b; margin-bottom: 8px;">
+                        BEFORE LEARNING (BASELINE OBSERVED)
+                    </div>
+                """,
+                unsafe_allow_html=True,
             )
-        else:
-            st.info("No route learning observations recorded yet.")
+            before_sorted = sorted(display_comparisons, key=lambda x: x.rank_before)
+            for item in before_sorted:
+                pref_badge = ' <span class="pill-blue" style="font-size: 0.68rem;">PREFERRED</span>' if item.is_preferred_before else ""
+                st.markdown(
+                    f"""
+                    <div style="display: flex; justify-content: space-between; align-items: center; padding: 6px 0; border-bottom: 1px solid #f1f5f9; font-size: 0.78rem;">
+                        <div>
+                            <strong>{item.rank_before}.</strong> {item.route}{pref_badge}
+                        </div>
+                        <div style="font-family: monospace; color: #475569; font-weight: 600;">
+                            {item.score_before:.4f}
+                        </div>
+                    </div>
+                    """,
+                    unsafe_allow_html=True,
+                )
+            st.markdown("</div>", unsafe_allow_html=True)
+
+        with r_col2:
+            st.markdown(
+                """
+                <div class="fintech-card" style="height: 100%;">
+                    <div style="font-size: 0.78rem; font-weight: 700; color: #1e40af; margin-bottom: 8px;">
+                        AFTER VERIFIED RECOVERY EVIDENCE
+                    </div>
+                """,
+                unsafe_allow_html=True,
+            )
+            after_sorted = sorted(display_comparisons, key=lambda x: x.rank_after)
+            for item in after_sorted:
+                pref_badge = ' <span class="pill-green" style="font-size: 0.68rem;">PREFERRED</span>' if item.is_preferred_after else ""
+                delta_str = f" <span style='color: #16a34a; font-weight: 700;'>↑ ({item.score_delta:+.4f})</span>" if item.score_delta > 0 else (f" <span style='color: #dc2626;'>↓ ({item.score_delta:+.4f})</span>" if item.score_delta < 0 else "")
+                st.markdown(
+                    f"""
+                    <div style="display: flex; justify-content: space-between; align-items: center; padding: 6px 0; border-bottom: 1px solid #f1f5f9; font-size: 0.78rem;">
+                        <div>
+                            <strong>{item.rank_after}.</strong> {item.route}{pref_badge}
+                        </div>
+                        <div style="font-family: monospace; color: #1e293b; font-weight: 700;">
+                            {item.score_after:.4f}{delta_str}
+                        </div>
+                    </div>
+                    """,
+                    unsafe_allow_html=True,
+                )
+            if not learning_view.preferred_route_changed and learning_view.has_learning_evidence:
+                st.caption("Verified recovery evidence recorded. Ranking unchanged.")
+            st.markdown("</div>", unsafe_allow_html=True)
+
+        # 4. Verified Recovery Evidence Comparison Table
+        table_rows = []
+        for item in display_comparisons:
+            table_rows.append(
+                {
+                    "Route": item.route,
+                    "Learned Attempts": item.learned_attempts,
+                    "Learned Recoveries": item.learned_recoveries,
+                    "Recovery Rate": f"{item.learned_recovery_rate * 100:.1f}%" if item.learned_attempts > 0 else "0.0%",
+                    "Evidence Confidence": f"{item.evidence_confidence * 100:.1f}%" if item.learned_attempts > 0 else "0.0%",
+                    "Score Before": f"{item.score_before:.4f}",
+                    "Score After": f"{item.score_after:.4f}",
+                    "Delta": f"{item.score_delta:+.4f}" if item.score_delta != 0 else "0.0000",
+                }
+            )
+        st.dataframe(pd.DataFrame(table_rows), use_container_width=True, hide_index=True)
+
+        # 5. Micro-Chart Visualization (Before → After Score Lift)
+        with st.expander("📊 Route Score Visualization (Before → After Lift)", expanded=False):
+            for item in display_comparisons:
+                b_pct = min(100, max(0, int(item.score_before * 100)))
+                a_pct = min(100, max(0, int(item.score_after * 100)))
+                bar_color = "#16a34a" if item.score_delta > 0 else ("#dc2626" if item.score_delta < 0 else "#64748b")
+                st.markdown(
+                    f"""
+                    <div style="margin-bottom: 10px;">
+                        <div style="font-size: 0.78rem; font-weight: 600; color: #1e293b; margin-bottom: 2px;">{item.route}</div>
+                        <div style="display: flex; align-items: center; gap: 8px;">
+                            <span style="font-size: 0.72rem; color: #64748b; width: 45px;">Before</span>
+                            <div style="flex-grow: 1; background: #e2e8f0; border-radius: 4px; height: 8px; overflow: hidden;">
+                                <div style="width: {b_pct}%; background: #94a3b8; height: 100%;"></div>
+                            </div>
+                            <span style="font-size: 0.72rem; font-family: monospace; color: #475569; width: 50px;">{item.score_before:.4f}</span>
+                        </div>
+                        <div style="display: flex; align-items: center; gap: 8px; margin-top: 2px;">
+                            <span style="font-size: 0.72rem; color: #64748b; width: 45px;">After</span>
+                            <div style="flex-grow: 1; background: #e2e8f0; border-radius: 4px; height: 8px; overflow: hidden;">
+                                <div style="width: {a_pct}%; background: {bar_color}; height: 100%;"></div>
+                            </div>
+                            <span style="font-size: 0.72rem; font-family: monospace; color: #0f172a; font-weight: 700; width: 50px;">{item.score_after:.4f}</span>
+                        </div>
+                    </div>
+                    """,
+                    unsafe_allow_html=True,
+                )
+
+        # 6. Persistent Learning Store Expander (Strictly Read-Only)
+        with st.expander("📁 Persistent Learning Store (recovery_learning.csv)", expanded=False):
+            st.caption("Underlying persistent CSV record store. Strictly read-only.")
+            try:
+                raw_history = (st.session_state.get("learning_history") or PersistentLearningHistory()).load()
+                if raw_history:
+                    raw_rows = [
+                        {
+                            "Route": r.route,
+                            "Attempts": r.attempts,
+                            "Recoveries": r.recoveries,
+                            "Recovery Rate": f"{r.recovery_rate * 100:.1f}%",
+                            "Net Value": f"₹{r.net_recovered_value:,.2f}",
+                            "Confidence": f"{r.evidence_confidence * 100:.1f}%",
+                        }
+                        for r in raw_history
+                    ]
+                    st.dataframe(pd.DataFrame(raw_rows), use_container_width=True, hide_index=True)
+                else:
+                    st.info("No persistent recovery records stored yet.")
+            except Exception as e:
+                st.warning(f"Could not load persistent learning records: {e}")
+
     except Exception as e:
-        st.warning(f"Could not load recovery learning history: {e}")
+        st.warning(f"Could not load recovery learning view: {e}")
+
 
 
     # =========================================
-    # SECTION 7 — AUDIT TRAIL
+    # SECTION 7 — SYSTEM EVALUATION SCORECARD
+    # =========================================
+
+    st.markdown('<div id="system-evaluation"></div>', unsafe_allow_html=True)
+    st.markdown(
+        '<div class="section-title">📈 System Evaluation Scorecard</div>',
+        unsafe_allow_html=True,
+    )
+    st.caption(
+        "Authoritative evaluation metrics measured across incident intelligence, AI decision, deterministic safety, bounded recovery, and continuous learning pipelines."
+    )
+
+    eval_view = prepare_dashboard_evaluation_scorecard(
+        incident=incident,
+        decision=intelligence_decision if intelligence_result else None,
+        safety_decision=safety if intelligence_result else None,
+        batch_result=st.session_state.get("batch_result"),
+        learning_history=st.session_state.get("learning_history"),
+        revenue_impact=revenue_impact_obj if revenue_impact_obj else (impact["revenue_at_risk"] if impact else 0.0),
+        eligible_amount=calc_eligible_amount,
+        route_candidates=route_candidates,
+    )
+    st.session_state["evaluation_scorecard"] = eval_view.scorecard
+
+    # Metric Row 1: Pre-Execution & Decision Projections
+    ev_col1, ev_col2, ev_col3 = st.columns(3)
+    with ev_col1:
+        st.metric(
+            "Incident Degradation",
+            eval_view.degradation_value,
+            delta=f"Severity: {eval_view.scorecard.severity}",
+            delta_color="off",
+            help="Observed route degradation against historical baseline.",
+        )
+        st.caption(f"**{eval_view.degradation_provenance}** • {eval_view.degradation_sub}")
+
+    with ev_col2:
+        st.metric(
+            "Revenue at Risk",
+            eval_view.revenue_at_risk_value,
+            delta=f"-₹{eval_view.scorecard.revenue_at_risk:,.0f} counterfactual",
+            delta_color="inverse",
+            help="Theoretical counterfactual revenue exposure quantified by IncidentRevenueEngine.",
+        )
+        st.caption(f"**{eval_view.revenue_at_risk_provenance}** • Pre-intervention risk")
+
+    with ev_col3:
+        st.metric(
+            "Expected Loss Reduction",
+            eval_view.expected_loss_reduction_value,
+            delta=f"₹{eval_view.scorecard.expected_loss_reduction:,.0f} mitigated",
+            delta_color="normal",
+            help="Theoretical expected loss reduction projected by IncidentDecisionEngine.",
+        )
+        st.caption(f"**{eval_view.expected_loss_reduction_provenance}** • {eval_view.expected_loss_reduction_sub}")
+
+    # Metric Row 2: Bounded Execution Outcomes
+    ev_col4, ev_col5, ev_col6 = st.columns(3)
+    with ev_col4:
+        st.metric(
+            "Recovery Rate",
+            eval_view.recovery_rate_value,
+            delta=f"{eval_view.scorecard.successful_recoveries:,} recovered" if eval_view.has_executed else None,
+            delta_color="normal",
+            help="Simulated proportion of bounded canary recovery transactions that succeeded.",
+        )
+        st.caption(f"**{eval_view.recovery_rate_provenance}** • {eval_view.recovery_rate_sub}")
+
+    with ev_col5:
+        st.metric(
+            "Net Recovered Value",
+            eval_view.net_recovered_value,
+            delta=f"₹{eval_view.scorecard.net_recovered_value:,.2f} net" if eval_view.has_executed else None,
+            delta_color="normal",
+            help="Simulated net recovered value (Gross Recovered minus Execution Cost).",
+        )
+        st.caption(f"**{eval_view.net_recovered_provenance}** • {eval_view.net_recovered_sub}")
+
+    with ev_col6:
+        st.metric(
+            "Recovery ROI",
+            eval_view.recovery_roi_value,
+            delta=f"{eval_view.recovery_roi_value} return" if eval_view.has_executed and eval_view.recovery_roi_value != "N/A" else None,
+            delta_color="normal",
+            help="Simulated recovery ROI (Net Value / Execution Cost). Displays N/A when execution cost is zero.",
+        )
+        st.caption(f"**{eval_view.recovery_roi_provenance}** • {eval_view.recovery_roi_sub}")
+
+    # Pipeline Governance & Status Summary Card
+    st.markdown(
+        f"""
+        <div class="fintech-card" style="margin-top: 1rem;">
+            <div style="font-size: 0.82rem; font-weight: 700; color: #64748b; text-transform: uppercase; letter-spacing: 0.05em; margin-bottom: 12px;">
+                Pipeline Governance & Verification Summary
+            </div>
+            <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 12px; align-items: start;">
+                <div>
+                    <div style="font-size: 0.75rem; color: #64748b; margin-bottom: 4px;">SAFETY OUTCOME <span style="font-size: 0.68rem; color: #94a3b8;">({eval_view.safety_provenance})</span></div>
+                    <div><span class="{eval_view.safety_pill_class}">{eval_view.safety_status_value}</span></div>
+                    <div style="font-size: 0.72rem; color: #64748b; margin-top: 4px;">{eval_view.safety_reason}</div>
+                </div>
+                <div>
+                    <div style="font-size: 0.75rem; color: #64748b; margin-bottom: 4px;">SELECTED ACTION</div>
+                    <div><span class="pill-blue">{eval_view.selected_action}</span></div>
+                    <div style="font-size: 0.72rem; color: #64748b; margin-top: 4px;">Confidence: {eval_view.scorecard.decision_confidence * 100:.1f}%</div>
+                </div>
+                <div>
+                    <div style="font-size: 0.75rem; color: #64748b; margin-bottom: 4px;">CANARY DECISION <span style="font-size: 0.68rem; color: #94a3b8;">(SIMULATED)</span></div>
+                    <div><span class="{eval_view.canary_pill_class}">{eval_view.canary_decision}</span></div>
+                    <div style="font-size: 0.72rem; color: #64748b; margin-top: 4px;">Bounded canary stage</div>
+                </div>
+                <div>
+                    <div style="font-size: 0.75rem; color: #64748b; margin-bottom: 4px;">GUARDRAIL DECISION <span style="font-size: 0.68rem; color: #94a3b8;">(SIMULATED)</span></div>
+                    <div><span class="{eval_view.guardrail_pill_class}">{eval_view.guardrail_decision}</span></div>
+                    <div style="font-size: 0.72rem; color: #64748b; margin-top: 4px;">Circuit breaker status</div>
+                </div>
+                <div>
+                    <div style="font-size: 0.75rem; color: #64748b; margin-bottom: 4px;">FINAL RECOVERY STATUS <span style="font-size: 0.68rem; color: #94a3b8;">(SIMULATED)</span></div>
+                    <div><span class="{eval_view.final_pill_class}">{eval_view.final_status}</span></div>
+                    <div style="font-size: 0.72rem; color: #64748b; margin-top: 4px;">Rollback required: <span class="{eval_view.rollback_pill_class}">{eval_view.rollback_required}</span></div>
+                </div>
+                <div>
+                    <div style="font-size: 0.75rem; color: #64748b; margin-bottom: 4px;">LEARNING EVIDENCE LIFT <span style="font-size: 0.68rem; color: #94a3b8;">({eval_view.learning_provenance})</span></div>
+                    <div><span class="{eval_view.learning_pill_class}">{eval_view.learning_lift_value}</span></div>
+                    <div style="font-size: 0.72rem; color: #64748b; margin-top: 4px;">{eval_view.learning_sub}</div>
+                </div>
+            </div>
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
+
+    # =========================================
+    # SECTION 8 — AUDIT TRAIL
     # =========================================
 
     st.markdown('<div id="recovery-audit-trail"></div>', unsafe_allow_html=True)
@@ -3193,58 +3880,58 @@ recovery action is permitted.
     # Audit history table
     audit_data = load_audit_log()
     if audit_data is not None and not audit_data.empty:
-        st.markdown("**Decision History Log**")
-        audit_display = audit_data.copy()
-        if "timestamp" in audit_display.columns:
-            audit_display["timestamp"] = pd.to_datetime(
-                audit_display["timestamp"], errors="coerce"
+        with st.expander("🔎 Detailed Governance Audit Log & Historical Records", expanded=False):
+            audit_display = audit_data.copy()
+            if "timestamp" in audit_display.columns:
+                audit_display["timestamp"] = pd.to_datetime(
+                    audit_display["timestamp"], errors="coerce"
+                )
+
+            if all(
+                col in audit_display.columns
+                for col in ["payment_method", "affected_bank", "device_type"]
+            ):
+                audit_display["route"] = (
+                    audit_display["payment_method"].astype(str)
+                    + " → "
+                    + audit_display["affected_bank"].astype(str)
+                    + " → "
+                    + audit_display["device_type"].astype(str)
+                )
+
+            desired_cols = [
+                "timestamp",
+                "route",
+                "recommended_bank",
+                "policy_decision",
+                "recovered_amount",
+                "execution_cost",
+                "net_recovered_value",
+                "recovery_rate",
+                "estimated_recovered_value",
+            ]
+            disp_cols = [c for c in desired_cols if c in audit_display.columns]
+
+            rename_map = {
+                "timestamp": "Run Time",
+                "route": "Route",
+                "recommended_bank": "Action",
+                "policy_decision": "Status",
+                "recovered_amount": "Recovered Amount",
+                "execution_cost": "Execution Cost",
+                "net_recovered_value": "Net Recovered Value",
+                "recovery_rate": "Recovery Rate",
+                "estimated_recovered_value": "Estimated Recovered Value",
+            }
+
+            formatted_audit = (
+                audit_display[disp_cols]
+                .sort_values("timestamp", ascending=False)
+                .rename(columns=rename_map)
             )
-
-        if all(
-            col in audit_display.columns
-            for col in ["payment_method", "affected_bank", "device_type"]
-        ):
-            audit_display["route"] = (
-                audit_display["payment_method"].astype(str)
-                + " → "
-                + audit_display["affected_bank"].astype(str)
-                + " → "
-                + audit_display["device_type"].astype(str)
+            st.dataframe(
+                formatted_audit.head(15), use_container_width=True, hide_index=True
             )
-
-        desired_cols = [
-            "timestamp",
-            "route",
-            "recommended_bank",
-            "policy_decision",
-            "recovered_amount",
-            "execution_cost",
-            "net_recovered_value",
-            "recovery_rate",
-            "estimated_recovered_value",
-        ]
-        disp_cols = [c for c in desired_cols if c in audit_display.columns]
-
-        rename_map = {
-            "timestamp": "Run Time",
-            "route": "Route",
-            "recommended_bank": "Action",
-            "policy_decision": "Status",
-            "recovered_amount": "Recovered Amount",
-            "execution_cost": "Execution Cost",
-            "net_recovered_value": "Net Recovered Value",
-            "recovery_rate": "Recovery Rate",
-            "estimated_recovered_value": "Estimated Recovered Value",
-        }
-
-        formatted_audit = (
-            audit_display[disp_cols]
-            .sort_values("timestamp", ascending=False)
-            .rename(columns=rename_map)
-        )
-        st.dataframe(
-            formatted_audit.head(15), use_container_width=True, hide_index=True
-        )
     else:
         st.info("No audit history recorded yet.")
 

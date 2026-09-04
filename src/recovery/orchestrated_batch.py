@@ -21,6 +21,7 @@ def execute_orchestrated_batch_recovery(
     device_type: str,
     batch_size: int = 50,
     human_approved: bool = False,
+    orchestrator: Optional[RecoveryOrchestrator] = None,
 ) -> Dict[str, Any]:
     """
     Execute a bounded batch recovery through the authoritative
@@ -122,7 +123,8 @@ def execute_orchestrated_batch_recovery(
         execution_safety = safety
         is_simulation_authorized = False
 
-    orchestrator = RecoveryOrchestrator()
+    if orchestrator is None:
+        orchestrator = RecoveryOrchestrator()
 
     orchestration_result: RecoveryOrchestrationResult = (
         orchestrator.execute(
