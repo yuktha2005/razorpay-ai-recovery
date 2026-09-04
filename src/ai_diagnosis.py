@@ -4,8 +4,13 @@ import pandas as pd
 
 from dotenv import load_dotenv
 from pydantic import BaseModel, Field, ValidationError
-from google import genai
-from google.genai import types
+
+try:
+    from google import genai
+    from google.genai import types
+except ImportError:
+    genai = None
+    types = None
 
 
 # =========================================
@@ -369,7 +374,7 @@ Do not bypass the policy engine.
 
 def get_gemini_client():
 
-    if not GEMINI_API_KEY:
+    if genai is None or not GEMINI_API_KEY:
 
         return None
 
