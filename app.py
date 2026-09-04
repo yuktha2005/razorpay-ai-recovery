@@ -88,221 +88,373 @@ from scenario_engine import (
     evaluate_scenario_control
 )
 
+from src.live_reporting.event_simulator import (
+    LivePaymentSimulator,
+)
+
 
 # =========================================
 # PAGE CONFIGURATION
 # =========================================
 
 st.set_page_config(
-    page_title="AI Payment Recovery",
-    page_icon="💳",
+    page_title="AI Payment Reliability Center",
+    page_icon="🛡️",
     layout="wide",
-    initial_sidebar_state="collapsed"
+    initial_sidebar_state="expanded",
 )
 
 
 # =========================================
-# CUSTOM CSS
+# CENTRALIZED FINTECH CSS
 # =========================================
 
 st.markdown(
     """
 <style>
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
+
+html, body, [class*="css"] {
+    font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+    color: #1e293b;
+    background-color: #f8fafc;
+}
 
 .block-container {
-    max-width: 1400px;
-    padding-top: 2rem;
+    max-width: 1320px;
+    padding-top: 1.25rem;
     padding-bottom: 3rem;
 }
 
-
-/* ========================================
-   HEADER
-   ======================================== */
+/* Header & Status */
+.header-bar {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    border-bottom: 1px solid #e2e8f0;
+    padding-bottom: 1.1rem;
+    margin-bottom: 1.25rem;
+}
 
 .product-title {
-    font-size: 2.2rem;
-    font-weight: 750;
-    margin-bottom: 0.15rem;
+    font-size: 1.85rem;
+    font-weight: 700;
+    color: #0f172a;
+    letter-spacing: -0.02em;
+    margin: 0;
+    line-height: 1.2;
 }
 
 .product-subtitle {
-    color: #8b949e;
-    font-size: 1rem;
-    margin-bottom: 1.2rem;
+    font-size: 0.92rem;
+    color: #64748b;
+    margin-top: 0.3rem;
+    font-weight: 400;
 }
 
+.badge-sim {
+    background-color: #f0f9ff;
+    color: #0284c7;
+    border: 1px solid #bae6fd;
+    padding: 3px 9px;
+    border-radius: 9999px;
+    font-size: 0.75rem;
+    font-weight: 600;
+    letter-spacing: 0.03em;
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+}
 
-/* ========================================
-   STATUS
-   ======================================== */
+.badge-status {
+    background-color: #ecfdf5;
+    color: #059669;
+    border: 1px solid #a7f3d0;
+    padding: 3px 9px;
+    border-radius: 9999px;
+    font-size: 0.72rem;
+    font-weight: 500;
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+}
 
-.status-row {
+/* Section Titles */
+.section-title {
+    font-size: 1.2rem;
+    font-weight: 700;
+    color: #0f172a;
+    letter-spacing: -0.01em;
+    margin-top: 1.6rem;
+    margin-bottom: 0.85rem;
     display: flex;
     align-items: center;
-    gap: 9px;
-    margin-top: 0.5rem;
-    margin-bottom: 0.7rem;
+    gap: 8px;
+    border-bottom: 1px solid #f1f5f9;
+    padding-bottom: 6px;
 }
 
-.status-dot {
-    width: 12px;
-    height: 12px;
-    border-radius: 50%;
-    display: inline-block;
-    background: #ff3b30;
+/* Fintech Cards */
+.fintech-card {
+    background: #ffffff;
+    border: 1px solid #e2e8f0;
+    border-radius: 10px;
+    padding: 1.25rem;
+    margin-bottom: 1.25rem;
+    box-shadow: 0 1px 3px rgba(16, 24, 40, 0.04);
 }
-
-
-/* ========================================
-   CARDS
-   ======================================== */
 
 .incident-card {
-    border: 1px solid rgba(255,255,255,0.12);
-    border-radius: 14px;
-    padding: 1.2rem;
-    margin-bottom: 1.2rem;
-    background: rgba(255,255,255,0.025);
+    background: #ffffff;
+    border: 1px solid #fed7aa;
+    border-left: 4px solid #f97316;
+    border-radius: 10px;
+    padding: 1.25rem 1.4rem;
+    margin-bottom: 1.25rem;
+    box-shadow: 0 1px 3px rgba(16, 24, 40, 0.04);
 }
 
-.route-label {
-    color: #8b949e;
-    font-size: 0.78rem;
-    margin-bottom: 0.25rem;
+.incident-card-critical {
+    background: #ffffff;
+    border: 1px solid #fecaca;
+    border-left: 4px solid #ef4444;
+    border-radius: 10px;
+    padding: 1.25rem 1.4rem;
+    margin-bottom: 1.25rem;
+    box-shadow: 0 1px 3px rgba(16, 24, 40, 0.04);
 }
 
-.route-value {
-    font-size: 1.8rem;
-    font-weight: 700;
+.decision-card {
+    background: #ffffff;
+    border: 1px solid #cbd5e1;
+    border-left: 4px solid #0284c7;
+    border-radius: 10px;
+    padding: 1.25rem 1.4rem;
+    margin-bottom: 1rem;
+    box-shadow: 0 1px 3px rgba(16, 24, 40, 0.04);
 }
 
-
-/* ========================================
-   SECTION
-   ======================================== */
-
-.section-title {
-    font-size: 1.4rem;
-    font-weight: 700;
-    margin-top: 1.2rem;
-    margin-bottom: 0.8rem;
-}
-
-
-/* ========================================
-   EXPLANATION
-   ======================================== */
-
-.explanation-card {
-    border-left: 4px solid #4da3ff;
-    padding: 0.8rem 1rem;
-    border-radius: 6px;
-    background: rgba(77,163,255,0.08);
-    margin: 0.8rem 0 1rem 0;
-}
-
-
-/* ========================================
-   AI DIAGNOSIS
-   ======================================== */
-
-.ai-card {
-    border: 1px solid rgba(77,163,255,0.25);
-    border-radius: 14px;
-    padding: 1.2rem;
-    background: rgba(77,163,255,0.04);
+.safety-card-safe {
+    background: #ffffff;
+    border: 1px solid #a7f3d0;
+    border-left: 4px solid #10b981;
+    border-radius: 10px;
+    padding: 1.25rem 1.4rem;
     margin-bottom: 1rem;
 }
 
-.ai-source {
-    display: inline-block;
-    border: 1px solid rgba(77,163,255,0.35);
-    border-radius: 20px;
-    padding: 0.25rem 0.7rem;
-    font-size: 0.75rem;
-    margin-bottom: 0.7rem;
+.safety-card-review {
+    background: #ffffff;
+    border: 1px solid #fde68a;
+    border-left: 4px solid #f59e0b;
+    border-radius: 10px;
+    padding: 1.25rem 1.4rem;
+    margin-bottom: 1rem;
 }
 
-
-/* ========================================
-   RECOVERY
-   ======================================== */
-
-.recovery-card {
-    border: 1px solid rgba(255,255,255,0.12);
-    border-radius: 14px;
-    padding: 1.3rem;
-    background: rgba(255,255,255,0.025);
+.safety-card-stop {
+    background: #ffffff;
+    border: 1px solid #fecaca;
+    border-left: 4px solid #ef4444;
+    border-radius: 10px;
+    padding: 1.25rem 1.4rem;
+    margin-bottom: 1rem;
 }
 
-
-/* ========================================
-   POLICY
-   ======================================== */
-
-.policy-recover {
-    border-left: 4px solid #32cd64;
-    padding: 0.9rem 1rem;
+/* Status Pills */
+.pill-green {
+    background: #ecfdf5;
+    color: #065f46;
+    border: 1px solid #a7f3d0;
+    padding: 3px 8px;
     border-radius: 6px;
-    background: rgba(50,205,100,0.08);
-}
-
-.policy-stop {
-    border-left: 4px solid #ff3b30;
-    padding: 0.9rem 1rem;
-    border-radius: 6px;
-    background: rgba(255,59,48,0.08);
-}
-
-.policy-escalate {
-    border-left: 4px solid #ffb020;
-    padding: 0.9rem 1rem;
-    border-radius: 6px;
-    background: rgba(255,176,32,0.08);
-}
-
-
-/* ========================================
-   SIMULATION
-   ======================================== */
-
-.simulation-result {
-    border: 1px solid rgba(50,205,100,0.25);
-    border-radius: 14px;
-    padding: 1.2rem;
-    background: rgba(50,205,100,0.05);
-    margin-top: 1rem;
-}
-
-
-/* ========================================
-   AUDIT
-   ======================================== */
-
-.audit-card {
-    border: 1px solid rgba(255,255,255,0.12);
-    border-radius: 14px;
-    padding: 1.2rem;
-    background: rgba(255,255,255,0.025);
-}
-
-
-/* ========================================
-   FOOTER
-   ======================================== */
-
-.footer {
-    color: #6e7681;
     font-size: 0.78rem;
+    font-weight: 600;
+    display: inline-block;
+}
+
+.pill-amber {
+    background: #fffbeb;
+    color: #92400e;
+    border: 1px solid #fde68a;
+    padding: 3px 8px;
+    border-radius: 6px;
+    font-size: 0.78rem;
+    font-weight: 600;
+    display: inline-block;
+}
+
+.pill-red {
+    background: #fef2f2;
+    color: #991b1b;
+    border: 1px solid #fecaca;
+    padding: 3px 8px;
+    border-radius: 6px;
+    font-size: 0.78rem;
+    font-weight: 600;
+    display: inline-block;
+}
+
+.pill-blue {
+    background: #f0f9ff;
+    color: #0369a1;
+    border: 1px solid #bae6fd;
+    padding: 3px 8px;
+    border-radius: 6px;
+    font-size: 0.78rem;
+    font-weight: 600;
+    display: inline-block;
+}
+
+/* Horizontal Lifecycle */
+.lifecycle-wrapper {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+    background: #ffffff;
+    border: 1px solid #e2e8f0;
+    border-radius: 10px;
+    padding: 1rem 1.25rem;
+    margin: 1rem 0;
+}
+
+.lifecycle-node {
+    flex: 1;
+    text-align: center;
+    padding: 8px 10px;
+    border-radius: 8px;
+    background: #f8fafc;
+    border: 1px solid #e2e8f0;
+}
+
+.lifecycle-node-label {
+    font-size: 0.7rem;
+    color: #64748b;
+    text-transform: uppercase;
+    font-weight: 600;
+    letter-spacing: 0.03em;
+    margin-bottom: 4px;
+}
+
+.lifecycle-arrow {
+    color: #94a3b8;
+    font-size: 1.1rem;
+    font-weight: bold;
+}
+
+/* Vertical Timeline */
+.timeline-track {
+    border-left: 2px solid #e2e8f0;
+    margin-left: 14px;
+    padding-left: 18px;
+    position: relative;
+    margin-top: 1rem;
+    margin-bottom: 1.25rem;
+}
+
+.timeline-step {
+    position: relative;
+    padding-bottom: 16px;
+}
+
+.timeline-step:last-child {
+    padding-bottom: 0;
+}
+
+.timeline-marker {
+    position: absolute;
+    left: -25px;
+    top: 3px;
+    width: 12px;
+    height: 12px;
+    border-radius: 50%;
+    background: #0284c7;
+    border: 2px solid #ffffff;
+    box-shadow: 0 0 0 2px #bae6fd;
+}
+
+.timeline-marker-success {
+    background: #10b981;
+    box-shadow: 0 0 0 2px #a7f3d0;
+}
+
+.timeline-marker-warn {
+    background: #f59e0b;
+    box-shadow: 0 0 0 2px #fde68a;
+}
+
+/* Footer */
+.footer-text {
+    color: #94a3b8;
+    font-size: 0.8rem;
     text-align: center;
     margin-top: 2rem;
+    padding-top: 1.5rem;
+    border-top: 1px solid #e2e8f0;
 }
-
 </style>
 """,
-    unsafe_allow_html=True
+    unsafe_allow_html=True,
 )
+
+
+# =========================================
+# SIDEBAR
+# =========================================
+
+with st.sidebar:
+    st.markdown(
+        """
+        <div style="font-size: 1.35rem; font-weight: 700; color: #0f172a; line-height: 1.15; margin-bottom: 2px;">
+            AI Payment<br><span style="color: #0284c7;">Reliability</span>
+        </div>
+        <div style="font-size: 0.8rem; color: #64748b; margin-bottom: 12px;">Reliability & Recovery Console</div>
+        """,
+        unsafe_allow_html=True,
+    )
+
+    st.markdown("**Demo Scenario**")
+    scenario_name = st.selectbox(
+        "Select scenario",
+        list_scenarios(),
+        index=0,
+        label_visibility="collapsed",
+        help="Counterfactual validation scenarios without live payment execution.",
+    )
+
+    selected_scenario = get_scenario(scenario_name)
+    scenario_view = scenario_summary(scenario_name)
+    scenario_control = evaluate_scenario_control(scenario_name)
+
+    st.caption(f"{scenario_view['description']}")
+
+    st.markdown("---")
+
+    st.markdown(
+        """
+        **Navigation**
+        - [• Overview](#system-overview)
+        - [• Decision Intelligence](#ai-decision-intelligence)
+        - [• Recovery Control](#recovery-control)
+        - [• Learning](#recovery-learning)
+        - [• Audit Trail](#recovery-audit-trail)
+        """
+    )
+
+    st.markdown("---")
+
+    st.markdown(
+        """
+        <div style="background: #f1f5f9; padding: 10px 12px; border-radius: 8px; font-size: 0.8rem;">
+            <div style="color: #0284c7; font-weight: 700;">⚙ SIMULATION MODE</div>
+            <div style="color: #334155; margin-top: 4px;">Environment: <b>Demo</b></div>
+            <div style="color: #334155;">Safety: <b>Enforced</b></div>
+            <div style="color: #64748b; font-size: 0.72rem; margin-top: 4px;">No live routing performed</div>
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
 
 
 # =========================================
@@ -310,21 +462,19 @@ st.markdown(
 # =========================================
 
 st.markdown(
-    '<div class="product-title">'
-    'AI Payment Recovery Agent'
-    '</div>',
-    unsafe_allow_html=True
-)
-
-st.markdown(
-    '<div class="product-subtitle">'
-    'Autonomous payment monitoring, diagnosis and recovery intelligence'
-    '</div>',
-    unsafe_allow_html=True
-)
-
-st.caption(
-    "SIMULATION ENVIRONMENT • NO LIVE PAYMENT ROUTING"
+    """
+    <div class="header-bar">
+        <div>
+            <div class="product-title">AI PAYMENT RELIABILITY CENTER</div>
+            <div class="product-subtitle">Detect revenue risk. Decide safely. Recover within bounds.</div>
+        </div>
+        <div style="display: flex; flex-direction: column; align-items: flex-end; gap: 4px;">
+            <span class="badge-sim">⚙ SIMULATION MODE</span>
+            <span class="badge-status">⚙ System Operational</span>
+        </div>
+    </div>
+    """,
+    unsafe_allow_html=True,
 )
 
 
@@ -367,220 +517,77 @@ failed_amount = transactions.loc[
 ].sum()
 
 
-st.markdown(
-    '<div class="section-title">'
-    'Payment Health'
-    '</div>',
-    unsafe_allow_html=True
-)
+# Load live report & audit data for overview metrics
+try:
+    live_store = LiveReportStore()
+    latest_path = live_store.latest()
+    if latest_path and latest_path.exists():
+        with open(latest_path, "r", encoding="utf-8") as f:
+            live_report = json.load(f)
+    else:
+        rep_gen = LiveReportGenerator()
+        live_report_obj = rep_gen.generate(transactions)
+        saved_path = live_store.save(live_report_obj)
+        with open(saved_path, "r", encoding="utf-8") as f:
+            live_report = json.load(f)
+except Exception:
+    live_report = {}
 
+audit_log = load_audit_log()
+total_simulated_recovered = 0.0
+if audit_log is not None and not audit_log.empty:
+    total_simulated_recovered = (
+        pd.to_numeric(audit_log.get("simulated_recovered_value", 0), errors="coerce")
+        .fillna(0)
+        .sum()
+    )
 
-col1, col2, col3, col4 = st.columns(4)
+incident = detect_incident(transactions)
+impact = calculate_revenue_impact(transactions, incident) if incident is not None else None
 
+# =========================================
+# SECTION 1 — SYSTEM OVERVIEW
+# =========================================
 
-with col1:
+st.markdown('<div id="system-overview"></div>', unsafe_allow_html=True)
+st.markdown('<div class="section-title">📊 System Overview</div>', unsafe_allow_html=True)
 
+kpi1, kpi2, kpi3, kpi4 = st.columns(4)
+
+with kpi1:
+    st.metric(
+        "Monitored Routes",
+        f"{live_report.get('routes_monitored', 60)}",
+        help="Active payment routes under continuous monitoring",
+    )
+
+with kpi2:
     st.metric(
         "Success Rate",
-        f"{overall_success * 100:.2f}%"
+        f"{overall_success * 100:.2f}%",
+        delta=f"{(overall_success - 0.9442) * 100:.2f} pp vs baseline",
+        help="Across all transactions in observation window",
     )
 
-
-with col2:
-
+with kpi3:
+    risk_display = impact["revenue_at_risk"] if impact else 0.0
     st.metric(
-        "Transactions",
-        f"{total_transactions:,}"
+        "Revenue at Risk",
+        f"₹{risk_display:,.0f}",
+        delta=f"-{impact['excess_failures']:.0f} excess failures" if impact else "0",
+        delta_color="inverse",
+        help="Excess failure loss quantified by revenue engine",
     )
 
-
-with col3:
-
+with kpi4:
     st.metric(
-        "Failed Transactions",
-        f"{failed_transactions:,}"
+        "Recovered Value",
+        f"₹{total_simulated_recovered:,.0f}",
+        help="Cumulative simulated counterfactual recovery",
     )
+    st.caption("Simulated / Counterfactual")
 
-
-with col4:
-
-    st.metric(
-        "Failed Amount",
-        f"₹{failed_amount:,.0f}"
-    )
-
-
-# =========================================
-# CONTROLLED INCIDENT SCENARIO SIMULATOR
-# =========================================
-
-st.markdown(
-    '<div class="section-title">'
-    '🎛️ Incident Scenario Simulator'
-    '</div>',
-    unsafe_allow_html=True
-)
-
-scenario_name = st.selectbox(
-    "Controlled incident scenario",
-    list_scenarios(),
-    index=0,
-    help=(
-        "Counterfactual demo scenarios used to validate "
-        "bounded recovery behavior. No live payment routing."
-    )
-)
-
-selected_scenario = get_scenario(scenario_name)
-scenario_view = scenario_summary(scenario_name)
-scenario_control = evaluate_scenario_control(scenario_name)
-
-sc1, sc2, sc3, sc4 = st.columns(4)
-
-with sc1:
-    st.metric(
-        "Scenario Success",
-        f"{scenario_view['current_success_rate'] * 100:.2f}%"
-    )
-
-with sc2:
-    st.metric(
-        "Baseline",
-        f"{scenario_view['baseline_success_rate'] * 100:.2f}%"
-    )
-
-with sc3:
-    st.metric(
-        "AI Confidence",
-        f"{scenario_view['ai_confidence'] * 100:.0f}%"
-    )
-
-with sc4:
-    st.metric(
-        "Expected Control",
-        scenario_view["expected_control"]
-    )
-
-st.caption(
-    f"{scenario_view['description']} "
-    "Scenario values are counterfactual and do not route real payments."
-)
-
-
-# =========================================
-# LIVE OPERATIONS REPORTING
-# =========================================
-
-with st.expander("📡 Real-Time Live Operations Intelligence", expanded=True):
-
-    try:
-        live_store = LiveReportStore()
-        latest_path = live_store.latest()
-
-        if latest_path and latest_path.exists():
-            with open(latest_path, "r", encoding="utf-8") as f:
-                live_report = json.load(f)
-        else:
-            rep_gen = LiveReportGenerator()
-            live_report_obj = rep_gen.generate(transactions)
-            saved_path = live_store.save(live_report_obj)
-            with open(saved_path, "r", encoding="utf-8") as f:
-                live_report = json.load(f)
-
-        lr1, lr2, lr3, lr4 = st.columns(4)
-
-        with lr1:
-            st.metric(
-                "Routes Monitored",
-                f"{live_report.get('routes_monitored', 0)}"
-            )
-
-        with lr2:
-            st.metric(
-                "Healthy Routes",
-                f"{live_report.get('healthy_routes', 0)}"
-            )
-
-        with lr3:
-            st.metric(
-                "Degraded Routes",
-                f"{live_report.get('degraded_routes', 0)}"
-            )
-
-        with lr4:
-            st.metric(
-                "Revenue at Risk",
-                f"₹{live_report.get('revenue_at_risk', 0.0):,.0f}"
-            )
-
-        st.caption(
-            f"Report ID: {live_report.get('report_id')} · "
-            f"Overall Success Rate: {live_report.get('overall_success_rate', 0.0) * 100:.2f}% "
-            f"(Baseline: {live_report.get('baseline_success_rate', 0.9442) * 100:.2f}%) · "
-            f"Top Degraded Route: {live_report.get('top_degraded_route', 'None')}"
-        )
-
-        routes_health_data = live_report.get("route_health", [])
-
-        if routes_health_data:
-            df_rh = pd.DataFrame(routes_health_data)
-            rh_cols = [
-                c for c in [
-                    "route",
-                    "transactions",
-                    "failures",
-                    "success_rate",
-                    "degradation_pp",
-                    "severity"
-                ] if c in df_rh.columns
-            ]
-
-            df_rh_disp = df_rh[rh_cols].copy()
-
-            if "success_rate" in df_rh_disp.columns:
-                df_rh_disp["success_rate"] = df_rh_disp[
-                    "success_rate"
-                ].apply(lambda v: f"{v * 100:.2f}%")
-
-            if "degradation_pp" in df_rh_disp.columns:
-                df_rh_disp["degradation_pp"] = df_rh_disp[
-                    "degradation_pp"
-                ].apply(lambda v: f"{v:.2f}")
-
-            df_rh_disp = df_rh_disp.rename(columns={
-                "route": "Route",
-                "transactions": "Transactions",
-                "failures": "Failures",
-                "success_rate": "Success Rate",
-                "degradation_pp": "Degradation (pp)",
-                "severity": "Severity"
-            })
-
-            st.dataframe(
-                df_rh_disp.head(10),
-                use_container_width=True,
-                hide_index=True
-            )
-
-    except Exception as e:
-        st.warning(f"Live operations report unavailable: {e}")
-
-
-# =========================================
-# DETECT INCIDENT
-# =========================================
-
-incident = detect_incident(
-    transactions
-)
-
-
-# =====================================
-# SCENARIO CONTROL OVERLAY
-# =====================================
-
-# The real detector remains the source of incident evidence.
-# Scenario controls are surfaced as a demonstration/validation layer.
+# Scenario control overlay alert
 if scenario_control["decision"] == "ESCALATE":
     st.warning(
         "🟡 Scenario safety control: automated recovery is intentionally "
@@ -602,139 +609,80 @@ elif scenario_control["decision"] == "CONTINUE":
         "performance guardrails."
     )
 
-
 if incident is None:
-
     st.success(
         "🟢 Payment system operating normally. "
         "No significant degradation detected."
     )
-
 else:
+    payment_method = incident["payment_method"]
+    affected_bank = incident["bank"]
+    device_type = incident["device_type"]
+    route = f"{payment_method} → {affected_bank} → {device_type}"
+    incident_success = incident["success_rate"] * 100
+    baseline_success = incident["baseline_success_rate"] * 100
+    degradation = incident["degradation_percentage_points"]
+    incident_start = pd.Timestamp(incident["time_window"])
+    incident_end = incident_start + pd.Timedelta(hours=1)
 
-    # =====================================
-    # INCIDENT VALUES
-    # =====================================
-
-    payment_method = (
-        incident["payment_method"]
+    severity_label = (
+        scenario_control.get("severity")
+        if scenario_control
+        else ("CRITICAL" if degradation >= 20 else "DEGRADED")
     )
-
-    affected_bank = (
-        incident["bank"]
+    is_critical = severity_label == "CRITICAL"
+    card_border_class = (
+        "incident-card-critical" if is_critical else "incident-card"
     )
-
-    device_type = (
-        incident["device_type"]
-    )
-
-    route = (
-        f"{payment_method} "
-        f"→ {affected_bank} "
-        f"→ {device_type}"
-    )
-
-    incident_success = (
-        incident["success_rate"]
-        * 100
-    )
-
-    baseline_success = (
-        incident["baseline_success_rate"]
-        * 100
-    )
-
-    degradation = (
-        incident[
-            "degradation_percentage_points"
-        ]
-    )
-
-    incident_start = pd.Timestamp(
-        incident["time_window"]
-    )
-
-    incident_end = (
-        incident_start
-        + pd.Timedelta(hours=1)
-    )
-
-
-    # =====================================
-    # ACTIVE INCIDENT
-    # =====================================
-
-    st.divider()
-
-    st.markdown(
-        """
-<div class="status-row">
-<span class="status-dot"></span>
-<span style="font-size:1.4rem;font-weight:700;">
-Active Payment Incident
-</span>
-</div>
-""",
-        unsafe_allow_html=True
-    )
+    pill_style = "pill-red" if is_critical else "pill-amber"
 
     st.markdown(
         f"""
-<div class="incident-card">
-
-<div class="route-label">
-AFFECTED PAYMENT ROUTE
-</div>
-
-<div class="route-value">
-{route}
-</div>
-
-</div>
-""",
-        unsafe_allow_html=True
+        <div class="{card_border_class}">
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
+                <div style="font-size: 0.78rem; font-weight: 700; color: #64748b; letter-spacing: 0.04em; text-transform: uppercase;">
+                    Active Incident
+                </div>
+                <span class="{pill_style}">SEVERITY: {severity_label}</span>
+            </div>
+            <div style="font-size: 1.4rem; font-weight: 700; color: #0f172a; margin-bottom: 12px;">
+                {route}
+            </div>
+            <div style="display: grid; grid-template-columns: repeat(5, 1fr); gap: 10px; padding-top: 10px; border-top: 1px solid #f1f5f9;">
+                <div>
+                    <div style="font-size: 0.72rem; color: #64748b;">Current Success</div>
+                    <div style="font-size: 1.15rem; font-weight: 700; color: #dc2626;">{incident_success:.2f}%</div>
+                </div>
+                <div>
+                    <div style="font-size: 0.72rem; color: #64748b;">Baseline</div>
+                    <div style="font-size: 1.15rem; font-weight: 600; color: #334155;">{baseline_success:.2f}%</div>
+                </div>
+                <div>
+                    <div style="font-size: 0.72rem; color: #64748b;">Degradation</div>
+                    <div style="font-size: 1.15rem; font-weight: 700; color: #dc2626;">-{degradation:.2f} pp</div>
+                </div>
+                <div>
+                    <div style="font-size: 0.72rem; color: #64748b;">Revenue at Risk</div>
+                    <div style="font-size: 1.15rem; font-weight: 700; color: #dc2626;">₹{impact['revenue_at_risk']:,.0f}</div>
+                </div>
+                <div>
+                    <div style="font-size: 0.72rem; color: #64748b;">Failed Txns</div>
+                    <div style="font-size: 1.15rem; font-weight: 600; color: #0f172a;">{impact['actual_failures']:,}</div>
+                </div>
+            </div>
+        </div>
+        """,
+        unsafe_allow_html=True,
     )
 
-
-    col1, col2, col3, col4 = st.columns(4)
-
-
-    with col1:
-
-        st.metric(
-            "Current Success",
-            f"{incident_success:.2f}%"
-        )
-
-
-    with col2:
-
-        st.metric(
-            "Historical Baseline",
-            f"{baseline_success:.2f}%"
-        )
-
-
-    with col3:
-
-        st.metric(
-            "Degradation",
-            f"-{degradation:.2f} pp"
-        )
-
-
-    with col4:
-
-        st.metric(
-            "Affected Transactions",
-            f"{int(incident['transactions']):,}"
-        )
-
-
-    st.info(
-        f"Incident window: "
-        f"{incident_start} → {incident_end}"
-    )
+    with st.expander("🔎 Incident Window & Historical Breakdown", expanded=False):
+        det_c1, det_c2 = st.columns(2)
+        with det_c1:
+            st.markdown(f"**Window:** `{incident_start} → {incident_end}`")
+            st.markdown(f"**Total Transactions:** `{int(incident['transactions']):,}`")
+        with det_c2:
+            st.markdown(f"**Failed Amount:** `₹{impact['failed_amount']:,.0f}`")
+            st.markdown(f"**Excess Failures:** `{impact['excess_failures']:.1f}`")
 
 
     # =====================================
@@ -1333,110 +1281,8 @@ if intelligence_result:
             "performance guardrail. Recovery must be rolled back."
         )
 
-    # ---------------------------------
-    # Financial intelligence
-    # ---------------------------------
-
-    di1, di2, di3, di4 = st.columns(4)
-
-    with di1:
-
-        st.metric(
-            "Financial Exposure",
-            f"₹{intelligence_result.financial_exposure:,.0f}"
-        )
-
-    with di2:
-
-        st.metric(
-            "Revenue at Risk",
-            f"₹{intelligence_result.revenue_at_risk:,.0f}"
-        )
-
-    with di3:
-
-        st.metric(
-            "Expected Loss",
-            f"₹{intelligence_result.expected_loss:,.0f}"
-        )
-
-    with di4:
-
-        st.metric(
-            "Decision Confidence",
-            f"{intelligence_decision.confidence * 100:.1f}%"
-        )
-
-    st.markdown(
-        "### Recommended Intervention"
-    )
-
-    st.info(
-        f"**{intelligence_decision.recommended_action}**"
-    )
-
-    st.caption(
-        intelligence_decision.explanation
-    )
-
-    st.markdown(
-        "### 🛡️ Safety Gate"
-    )
-
-    if safety.allowed:
-
-        st.success(
-            f"**{safety.action} — ALLOWED**\n\n"
-            f"{safety.reason}"
-        )
-
-    elif safety.requires_human_review:
-
-        st.warning(
-            f"**{safety.action} — HUMAN REVIEW REQUIRED**\n\n"
-            f"{safety.reason}"
-        )
-
-    else:
-
-        st.error(
-            f"**{safety.action} — BLOCKED**\n\n"
-            f"{safety.reason}"
-        )
-
-    if intelligence_result.ranked_routes:
-
-        st.markdown(
-            "### 🏦 Ranked Alternative Routes"
-        )
-
-        route_rows = []
-
-        for route_score in intelligence_result.ranked_routes:
-
-            route_rows.append(
-                {
-                    "Route": route_score.route,
-                    "Transactions": route_score.transactions,
-                    "Observed Success":
-                        f"{route_score.observed_success_rate * 100:.2f}%",
-                    "Adjusted Success":
-                        f"{route_score.adjusted_success_rate * 100:.2f}%",
-                    "Evidence Confidence":
-                        f"{route_score.evidence_confidence * 100:.2f}%",
-                    "Score":
-                        f"{route_score.score:.4f}",
-                }
-            )
-
-        st.dataframe(
-            pd.DataFrame(route_rows),
-            use_container_width=True,
-            hide_index=True
-        )
-
     # =====================================
-    # RECOVERY DECISION
+    # RECOVERY RECOMMENDATION & POLICY
     # =====================================
 
     # =====================================
@@ -2144,770 +1990,343 @@ recovery action is permitted.
     if "batch_result" not in st.session_state:
         st.session_state["batch_result"] = None
 
-    batch_result = st.session_state["batch_result"]
+    # =========================================
+    # SECTION 2 — AI DECISION INTELLIGENCE
+    # =========================================
 
-
-    # =====================================
-    # AGENT DECISION TRAIL
-    # =====================================
-
+    st.markdown('<div id="ai-decision-intelligence"></div>', unsafe_allow_html=True)
     st.markdown(
-        '<div class="section-title">'
-        '🤖 Agent Decision Trail'
-        '</div>',
-        unsafe_allow_html=True
+        '<div class="section-title">🤖 AI Decision Intelligence</div>',
+        unsafe_allow_html=True,
     )
 
+    rec_action = intelligence_decision.recommended_action
+    conf_str = f"{intelligence_decision.confidence * 100:.0f}%"
 
-    ai_diagnosis_text = (
-        (
-            f"{ai_diagnosis['severity']} severity "
-            f"diagnosis with "
-            f"{ai_diagnosis['confidence']:.0f}% confidence."
+    d_col1, d_col2 = st.columns([1.5, 1])
+
+    with d_col1:
+        st.markdown(
+            f"""
+            <div class="decision-card">
+                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
+                    <div style="font-size: 0.78rem; font-weight: 700; color: #0284c7; text-transform: uppercase;">
+                        AI Recommendation
+                    </div>
+                    <span class="pill-blue">CONFIDENCE: {conf_str}</span>
+                </div>
+                <div style="font-size: 1.35rem; font-weight: 700; color: #0f172a; margin-bottom: 12px;">
+                    {rec_action}
+                </div>
+                <div style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; padding-top: 10px; border-top: 1px solid #f1f5f9;">
+                    <div>
+                        <div style="font-size: 0.72rem; color: #64748b;">Expected Loss Before</div>
+                        <div style="font-size: 1rem; font-weight: 600; color: #64748b;">₹{intelligence_decision.expected_loss_before:,.0f}</div>
+                    </div>
+                    <div>
+                        <div style="font-size: 0.72rem; color: #64748b;">Expected Loss After</div>
+                        <div style="font-size: 1rem; font-weight: 600; color: #059669;">₹{intelligence_decision.expected_loss_after:,.0f}</div>
+                    </div>
+                    <div>
+                        <div style="font-size: 0.72rem; color: #64748b;">Estimated Recovery</div>
+                        <div style="font-size: 1rem; font-weight: 700; color: #0284c7;">₹{intelligence_decision.estimated_value:,.0f}*</div>
+                    </div>
+                </div>
+                <div style="font-size: 0.72rem; color: #94a3b8; margin-top: 8px;">*Simulated counterfactual projection</div>
+            </div>
+            """,
+            unsafe_allow_html=True,
         )
-        if ai_diagnosis
-        else
-        "AI diagnosis unavailable."
-    )
 
-
-    steps = [
-
-        (
-            "1",
-            "🔴 DETECT",
-            "Payment degradation detected",
-            (
-                f"{route} dropped to "
-                f"{incident_success:.2f}% success."
-            )
-        ),
-
-        (
-            "2",
-            "🤖 DIAGNOSE",
-            "AI diagnosis generated",
-            ai_diagnosis_text
-        ),
-
-        (
-            "3",
-            "💰 QUANTIFY",
-            "Business impact calculated",
-            (
-                f"₹{impact['revenue_at_risk']:,.0f} "
-                f"estimated revenue at risk."
-                if impact
-                else
-                "Business impact calculated."
-            )
-        ),
-
-        (
-            "4",
-            "🏦 COMPARE",
-            "Alternative routes evaluated",
-            (
-                f"{recovery['alternative_bank']} "
-                f"selected from eligible "
-                f"{payment_method} + "
-                f"{device_type} alternatives."
-                if recovery
-                else
-                "Alternative routes evaluated."
-            )
-        ),
-
-        (
-            "5",
-            "🛡️ POLICY",
-            "Recovery policy evaluated",
-            (
-                f"Policy decision: "
-                f"{decision}."
-            )
-        ),
-
-        (
-            "6",
-            "⚡ RECOMMEND",
-            "Recovery strategy generated",
-            (
-                f"Prefer "
-                f"{recovery['alternative_bank']} "
-                f"for eligible "
-                f"{payment_method} + "
-                f"{device_type} traffic."
-                if (
-                    recovery
-                    and decision == "RECOVER"
-                )
-                else
-                "Recovery strategy requires review "
-                "or was blocked."
-            )
-        ),
-
-        (
-            "7",
-            "🛡️ GUARDRAIL",
-            "Recovery safety monitored",
-            (
-                f"Guardrail decision: "
-                f"{batch_result.get('guardrail_decision', 'PENDING')}."
-                if batch_result
-                else
-                "Recovery guardrail activates after the batch simulation."
-            )
-        ),
-
-        (
-            "8",
-            "📋 AUDIT",
-            "Recovery decision recorded",
-            "Policy decision, recovery outcome and safety state are persisted in the audit trail."
+    with d_col2:
+        gemini_diag = (
+            ai_diagnosis["primary_diagnosis"]
+            if ai_diagnosis
+            else "AI advisory diagnosis based on observed telemetry."
         )
-    ]
-
-
-    for number, title, heading, description in steps:
-
-        with st.container(border=True):
-
-            col1, col2, col3 = st.columns(
-                [0.7, 1.4, 4]
-            )
-
-
-            with col1:
-
-                st.markdown(
-                    f"### {number}"
-                )
-
-
-            with col2:
-
-                st.markdown(
-                    f"**{title}**"
-                )
-
-
-            with col3:
-
-                st.markdown(
-                    f"**{heading}**"
-                )
-
-                st.caption(
-                    description
-                )
-
-
-    # =====================================
-    # RECOVERY SIMULATION
-    # =====================================
-
-    st.markdown(
-        '<div class="section-title">'
-        '🔬 Batch Recovery Simulation'
-        '</div>',
-        unsafe_allow_html=True
-    )
-
-    st.caption(
-        "Counterfactual batch simulation — no real payment "
-        "routing or payment processing is performed."
-    )
+        st.markdown(
+            f"""
+            <div class="fintech-card">
+                <div style="font-size: 0.82rem; font-weight: 700; color: #0f172a; margin-bottom: 6px;">
+                    Why This Decision?
+                </div>
+                <div style="font-size: 0.82rem; color: #475569; line-height: 1.5; margin-bottom: 10px;">
+                    {intelligence_decision.explanation}
+                </div>
+                <div style="font-size: 0.75rem; color: #64748b; background: #f8fafc; padding: 8px; border-radius: 6px; border: 1px solid #e2e8f0;">
+                    <b>Advisory Evidence:</b> {gemini_diag}
+                </div>
+            </div>
+            """,
+            unsafe_allow_html=True,
+        )
 
     if recovery:
+        st.markdown("**Route Performance Comparison**")
+        comp_df = pd.DataFrame(
+            [
+                {
+                    "Route": f"{payment_method} + {affected_bank} + {device_type} (Affected)",
+                    "Success Rate": f"{incident_success:.2f}%",
+                    "Baseline": f"{baseline_success:.2f}%",
+                    "Degradation": f"-{degradation:.2f} pp",
+                    "Role": "Underperforming Route",
+                },
+                {
+                    "Route": f"{payment_method} + {recovery['alternative_bank']} + {device_type} (Recommended)",
+                    "Success Rate": f"{recovery['alternative_success_rate'] * 100:.2f}%",
+                    "Baseline": f"{baseline_success:.2f}%",
+                    "Degradation": f"+{recovery.get('improvement', (recovery['alternative_success_rate'] - incident['success_rate'])) * 100:.2f} pp",
+                    "Role": "Alternative Target",
+                },
+            ]
+        )
+        st.dataframe(comp_df, use_container_width=True, hide_index=True)
 
-        triggered_simulation = False
-        simulation_human_approved = False
+    # =========================================
+    # SECTION 3 — SAFETY CONTROL
+    # =========================================
 
-        if decision == "RECOVER":
+    st.markdown('<div id="safety-control"></div>', unsafe_allow_html=True)
+    st.markdown(
+        '<div class="section-title">🛡️ Safety Control</div>',
+        unsafe_allow_html=True,
+    )
 
-            simulate_btn = st.button(
-                "🚀 Simulate Approved Batch Recovery",
-                type="primary",
-                use_container_width=True
-            )
+    safety_col, demo_auth_col = st.columns(2)
 
-            if simulate_btn:
-                triggered_simulation = True
-                simulation_human_approved = False
+    decision_status = policy_result.get("decision", safety.action)
 
-        elif decision == "ESCALATE":
-
-            st.markdown(
-                """
-                <div class="policy-escalate" style="padding: 16px; border-radius: 8px; margin-bottom: 16px;">
-                <h4 style="margin-top:0;">🛡️ PRODUCTION SAFETY DECISION: HUMAN REVIEW REQUIRED</h4>
-                <b>Status:</b> 🔒 Automated Execution Strictly Blocked<br>
-                <b>Reason:</b> High-impact route recovery requires human authorization before intervention. Automated routing is strictly prevented by the deterministic SafetyController.
-                </div>
-                """,
-                unsafe_allow_html=True
-            )
-
-            st.markdown("#### 👤 Operator Authorization (Simulation / Demo Only)")
-
-            st.caption(
-                "Explicit human-in-the-loop authorization to evaluate a bounded canary recovery simulation. "
-                "No real payments or live routing are performed."
-            )
-
-            human_auth_confirmed = st.checkbox(
-                "Authorize Bounded Recovery Simulation as Human Operator (Demo / Simulation Only)",
-                key="human_operator_simulation_auth"
-            )
-
-            if human_auth_confirmed:
-
-                st.markdown(
-                    """
-                    <div style="background-color: #1e293b; border-left: 4px solid #3b82f6; padding: 12px; border-radius: 6px; margin-bottom: 12px;">
-                    <span style="color: #60a5fa; font-weight: bold;">🔬 SIMULATION AUTHORIZATION = HUMAN APPROVED FOR DEMO</span><br>
-                    <span style="font-size: 0.9em; color: #cbd5e1;">Bounded canary simulation authorized by operator. Production safety gate remains strictly logged as HUMAN REVIEW REQUIRED.</span>
-                    </div>
-                    """,
-                    unsafe_allow_html=True
-                )
-
-                sim_escalate_btn = st.button(
-                    "🚀 Simulate Human-Approved Bounded Recovery",
-                    type="primary",
-                    use_container_width=True
-                )
-
-                if sim_escalate_btn:
-                    triggered_simulation = True
-                    simulation_human_approved = True
-
-            else:
-
-                st.info("Operator confirmation required above to simulate human-approved bounded recovery.")
-
-        elif decision == "ROLLBACK":
-
-            st.markdown(
-                """
-                <div class="policy-stop" style="padding: 16px; border-radius: 8px; margin-bottom: 16px;">
-                <h4 style="margin-top:0;">↩️ SCENARIO GUARDRAIL: ROLLBACK DEMONSTRATION</h4>
-                <b>Condition:</b> Recovery starts, but alternative route performance degrades below the guardrail threshold (88.39% < 91.00%).<br>
-                <b>Objective:</b> Demonstrate automatic circuit breaker activation and rollback enforcement.
-                </div>
-                """,
-                unsafe_allow_html=True
-            )
-
-            rollback_btn = st.button(
-                "🔄 Simulate Active Recovery with Guardrail Monitoring (Rollback Test)",
-                type="primary",
-                use_container_width=True
-            )
-
-            if rollback_btn:
-                triggered_simulation = True
-                simulation_human_approved = True
-
-        elif decision == "STOP":
-
-            st.markdown(
-                """
-                <div class="policy-stop" style="padding: 16px; border-radius: 8px; margin-bottom: 16px;">
-                <h4 style="margin-top:0;">🔴 PRODUCTION SAFETY DECISION: STOP</h4>
-                <b>Status:</b> 🔒 Automated Recovery Blocked<br>
-                <b>Reason:</b> Mild degradation (3.92 pp) does not cross the recovery threshold (5.00 pp). Interventions for sub-threshold events introduce unnecessary switching risk.
-                </div>
-                """,
-                unsafe_allow_html=True
-            )
-
-            stop_btn = st.button(
-                "🔒 Verify Bounded Safety Gate Enforcement (Simulate Blocked Execution)",
-                use_container_width=True
-            )
-
-            if stop_btn:
-                triggered_simulation = True
-                simulation_human_approved = False
-
+    with safety_col:
+        if decision_status == "RECOVER":
+            s_class = "safety-card-safe"
+            s_badge = '<span class="pill-green">SAFE</span>'
+        elif decision_status == "ESCALATE":
+            s_class = "safety-card-review"
+            s_badge = '<span class="pill-amber">HUMAN REVIEW REQUIRED</span>'
+        elif decision_status == "ROLLBACK":
+            s_class = "safety-card-stop"
+            s_badge = '<span class="pill-red">ROLLBACK</span>'
         else:
+            s_class = "safety-card-stop"
+            s_badge = '<span class="pill-red">STOP</span>'
 
-            st.success(
-                "🟢 **CONTINUE — Normal Operations Confirmed**\n\n"
-                "Payment route is operating normally within configured performance guardrails. "
-                "No recovery intervention is required or permitted."
-            )
-
-        if triggered_simulation:
-
-            with st.spinner(
-                "Simulating recovery across the affected batch..."
-            ):
-
-                try:
-
-                    batch_result = execute_orchestrated_batch_recovery(
-                        transactions=transactions,
-                        incident=incident,
-                        decision=intelligence_result.decision,
-                        safety=safety,
-                        recovery=recovery,
-                        payment_method=payment_method,
-                        affected_bank=affected_bank,
-                        device_type=device_type,
-                        batch_size=50,
-                        human_approved=simulation_human_approved,
-                    )
-
-                    st.session_state["batch_result"] = batch_result
-
-                except Exception as e:
-
-                    batch_result = None
-                    st.session_state["batch_result"] = None
-
-                    st.error(
-                        f"Batch recovery simulation failed: {e}"
-                    )
-
-        batch_result = st.session_state.get("batch_result")
-
-        if batch_result:
-
-            # =====================================
-            # SAFETY & SIMULATION DISTINCTION
-            # =====================================
-
-            if batch_result.get("simulation_authorized"):
-
-                st.markdown(
-                    """
-                    <div style="background: rgba(59, 130, 246, 0.12); border: 1px solid #3b82f6; border-radius: 8px; padding: 14px; margin-top: 14px; margin-bottom: 14px;">
-                    <span style="font-size: 1.05em; font-weight: bold; color: #f59e0b;">🛡️ PRODUCTION SAFETY DECISION: HUMAN REVIEW REQUIRED</span><br>
-                    <span style="font-size: 1.05em; font-weight: bold; color: #60a5fa;">🔬 SIMULATION AUTHORIZATION: HUMAN APPROVED FOR DEMO</span><br>
-                    <small style="color: #94a3b8;">Original production safety decision strictly preserved in audit trail as policy_approved=False, human_review_required=True.</small>
+        st.markdown(
+            f"""
+            <div class="{s_class}">
+                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
+                    <div style="font-size: 0.78rem; font-weight: 700; color: #475569; text-transform: uppercase;">
+                        Production Safety Decision
                     </div>
-                    """,
-                    unsafe_allow_html=True
-                )
+                    {s_badge}
+                </div>
+                <div style="font-size: 1.15rem; font-weight: 700; color: #0f172a; margin-bottom: 8px;">
+                    {safety.action}
+                </div>
+                <div style="font-size: 0.85rem; color: #475569; line-height: 1.45; margin-bottom: 10px;">
+                    {policy_result.get('reason', safety.reason)}
+                </div>
+                <div style="font-size: 0.76rem; color: #64748b; border-top: 1px solid #f1f5f9; padding-top: 8px;">
+                    Automated execution is controlled by deterministic safety policies.
+                </div>
+            </div>
+            """,
+            unsafe_allow_html=True,
+        )
 
-            else:
-
-                st.markdown(
-                    f"""
-                    <div style="background: rgba(16, 185, 129, 0.12); border: 1px solid #10b981; border-radius: 8px; padding: 14px; margin-top: 14px; margin-bottom: 14px;">
-                    <span style="font-size: 1.05em; font-weight: bold; color: #10b981;">🛡️ PRODUCTION SAFETY DECISION: {batch_result.get('safety_action', 'APPROVED')}</span><br>
-                    <span style="font-size: 1.05em; font-weight: bold; color: #10b981;">🔬 EXECUTION CONTEXT: BOUNDED SIMULATION ({batch_result.get('final_status', 'COMPLETED')})</span>
+    with demo_auth_col:
+        st.markdown(
+            """
+            <div class="fintech-card" style="border: 1px solid #bae6fd; background: #f0f9ff;">
+                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
+                    <div style="font-size: 0.78rem; font-weight: 700; color: #0369a1; text-transform: uppercase;">
+                        Simulation Authorization
                     </div>
-                    """,
-                    unsafe_allow_html=True
+                    <span class="pill-blue">DEMO ONLY</span>
+                </div>
+                <div style="font-size: 0.95rem; font-weight: 600; color: #0f172a; margin-bottom: 6px;">
+                    Operator Authorization for Bounded Recovery Simulation
+                </div>
+                <div style="font-size: 0.82rem; color: #475569; line-height: 1.4; margin-bottom: 12px;">
+                    Demo-only authorization for bounded recovery simulation. Does NOT authorize real payment execution.
+                </div>
+            """,
+            unsafe_allow_html=True,
+        )
+
+        human_auth_confirmed = False
+        if decision_status == "ESCALATE":
+            human_auth_confirmed = st.checkbox(
+                "Authorize Bounded Recovery Simulation",
+                key="human_operator_simulation_auth",
+                help="Demo authorization for simulation. Production safety remains strictly recorded as HUMAN REVIEW REQUIRED in the audit log.",
+            )
+            if human_auth_confirmed:
+                st.caption(
+                    "✔ Demo authorization active for bounded recovery simulation."
                 )
-
-            # =====================================
-            # RECOVERY SAFETY GUARDRAIL
-            # =====================================
-
-            guardrail_decision = batch_result.get(
-                "guardrail_decision",
-                "NOT_RECORDED"
-            )
-
-            guardrail_reason = batch_result.get(
-                "guardrail_reason",
-                "No guardrail information available."
-            )
-
-            recovery_healthy = batch_result.get(
-                "recovery_healthy",
-                False
-            )
-
-            rollback_required = batch_result.get(
-                "rollback_required",
-                False
-            )
-
-            st.markdown(
-                "### 🛡️ Recovery Safety Guardrail"
-            )
-
-            if guardrail_decision == "CONTINUE":
-
-                st.success(
-                    f"🟢 **CONTINUE — Recovery healthy**\n\n"
-                    f"{guardrail_reason}"
-                )
-
-            elif guardrail_decision == "ROLLBACK":
-
-                st.error(
-                    f"↩️ **ROLLBACK — Recovery guardrail breached**\n\n"
-                    f"{guardrail_reason}"
-                )
-
-            elif guardrail_decision == "STOP":
-
-                st.error(
-                    f"🔴 **STOP — Recovery halted**\n\n"
-                    f"{guardrail_reason}"
-                )
-
             else:
-
-                st.info(
-                    f"Guardrail status: "
-                    f"{guardrail_decision}\n\n"
-                    f"{guardrail_reason}"
+                st.caption(
+                    "Operator authorization required to simulate bounded recovery."
                 )
+        else:
+            st.caption("Human escalation not required for this scenario.")
 
-            g1, g2, g3 = st.columns(3)
+        st.markdown("</div>", unsafe_allow_html=True)
 
-            with g1:
-                st.metric(
-                    "Guardrail",
-                    guardrail_decision
-                )
+    # =========================================
+    # SECTION 4 — RECOVERY CONTROL
+    # =========================================
 
-            with g2:
-                st.metric(
-                    "Recovery Healthy",
-                    "YES" if recovery_healthy else "NO"
-                )
-
-            with g3:
-                st.metric(
-                    "Rollback Required",
-                    "YES" if rollback_required else "NO"
-                )
-
-            # =====================================
-            # CANARY CONTROL DECISION
-            # =====================================
-
-            canary_decision = batch_result.get(
-                "canary_decision",
-                batch_result.get("final_status", "PENDING")
-            )
-
-            canary_reason = batch_result.get(
-                "canary_reason",
-                "Canary decision is recorded by the recovery orchestrator."
-            )
-
-            st.markdown(
-                "### 🎯 Canary Control Decision"
-            )
-
-            if canary_decision == "EXPAND":
-
-                st.success(
-                    f"🟢 **EXPAND — Canary passed**\n\n"
-                    f"{canary_reason}"
-                )
-
-            elif canary_decision == "STOP":
-
-                st.warning(
-                    f"🟡 **STOP — Canary expansion blocked**\n\n"
-                    f"{canary_reason}"
-                )
-
-            elif canary_decision == "ESCALATE":
-
-                st.error(
-                    f"🔴 **ESCALATE — Human review required**\n\n"
-                    f"{canary_reason}"
-                )
-
-            elif canary_decision == "BLOCKED":
-
-                st.error(
-                    f"🔒 **BLOCKED — Execution blocked by safety controller**\n\n"
-                    f"{canary_reason}"
-                )
-
-            else:
-
-                st.info(
-                    f"Canary decision: **{canary_decision}**\n\n"
-                    f"{canary_reason}"
-                )
-
-            st.caption(
-                "Canary decisions are bounded controls. "
-                "EXPAND authorizes evaluation for a larger bounded batch; "
-                "it does not trigger live payment routing."
-            )
-
-            # -------------------------------------
-            # BATCH OUTCOME
-            # -------------------------------------
-
-            st.markdown(
-                '<div class="simulation-result">',
-                unsafe_allow_html=True
-            )
-
-            st.markdown(
-                "### 📊 Recovery Outcome"
-            )
-
-            c1, c2, c3, c4 = st.columns(4)
-
-            with c1:
-                st.metric(
-                    "Eligible Transactions",
-                    f"{batch_result.get('eligible_transactions', 0):,}"
-                )
-
-            with c2:
-                st.metric(
-                    "Simulated Recovered",
-                    f"{batch_result.get('recovered_transactions', 0):,}"
-                )
-
-            with c3:
-                st.metric(
-                    "Canary Attempted",
-                    f"{batch_result.get('attempted_transactions', 0):,}"
-                )
-
-            with c4:
-                st.metric(
-                    "Canary Recovery Rate",
-                    f"{batch_result.get('canary_recovery_rate', 0.0) * 100:.2f}%"
-                )
-
-            c1, c2, c3 = st.columns(3)
-
-            with c1:
-                st.metric(
-                    "Success Improvement",
-                    f"+{batch_result.get('success_rate_improvement', 0.0) * 100:.2f} pp"
-                )
-
-            with c2:
-                st.metric(
-                    "Expected Additional Successes",
-                    f"{batch_result.get('expected_additional_successes', 0.0):.1f}"
-                )
-
-            with c3:
-                st.metric(
-                    "Recommended Bank",
-                    str(batch_result.get("alternative_bank", "None"))
-                )
-
-            c1, c2 = st.columns(2)
-
-            with c1:
-                st.metric(
-                    "Estimated Recovered Value",
-                    f"₹{batch_result.get('estimated_recovered_value', 0.0):,.2f}"
-                )
-
-            with c2:
-                st.metric(
-                    "Simulated Recovered Value",
-                    f"₹{batch_result.get('simulated_recovered_value', 0.0):,.2f}"
-                )
-
-            st.markdown(
-                f"""
-<div class="explanation-card">
-
-<b>Counterfactual batch result:</b>
-
-Of
-<b>{batch_result.get('eligible_transactions', 0):,}</b>
-eligible failed transactions,
-<b>{batch_result.get('recovered_transactions', 0):,}</b>
-are simulated as recovered by shifting eligible traffic from
-<b>{batch_result.get('alternative_bank', 'None')}</b>
-according to the recovery strategy.
-
-<br><br>
-
-<b>{batch_result.get('attempted_transactions', 0):,}</b>
-transactions were executed in the bounded canary, while the canary recovery rate reaches
-<b>{batch_result.get('canary_recovery_rate', 0.0) * 100:.2f}%</b>.
-
-<br><br>
-
-The model expected approximately
-<b>{batch_result.get('expected_additional_successes', 0.0):.1f}</b>
-additional successes across the affected traffic, while the bounded canary produced
-<b>{batch_result.get('recovered_transactions', 0):,}</b>
-simulated recoveries.
-
-<br><br>
-
-<b>Estimated recoverable value:</b>
-₹{batch_result.get('estimated_recovered_value', 0.0):,.2f}
-<br>
-
-<b>Simulated recovered value:</b>
-₹{batch_result.get('simulated_recovered_value', 0.0):,.2f}
-
-<br><br>
-
-These are counterfactual simulation results, not real payment outcomes.
-
-</div>
-""",
-                unsafe_allow_html=True
-            )
-
-            st.markdown(
-                '</div>',
-                unsafe_allow_html=True
-            )
-
-
-# =========================================
-# SCENARIO VALIDATION SUMMARY
-# =========================================
-
-with st.expander("🧪 Scenario validation details"):
-    st.write(
-        {
-            "scenario": scenario_name,
-            "severity": scenario_control["severity"],
-            "ai_confidence": f"{scenario_control['confidence'] * 100:.0f}%",
-            "expected_control": scenario_control["decision"],
-            "guardrail": scenario_control["guardrail"],
-            "human_review_required": scenario_control["human_review_required"],
-            "rollback_required": scenario_control["rollback_required"],
-        }
+    st.markdown('<div id="recovery-control"></div>', unsafe_allow_html=True)
+    st.markdown(
+        '<div class="section-title">⚡ Recovery Control</div>',
+        unsafe_allow_html=True,
     )
 
-# =========================================
-# AUDIT TRAIL
-# =========================================
+    stage_dec = (
+        f'<span class="pill-green">✔ {intelligence_decision.recommended_action}</span>'
+    )
+    if safety.requires_human_review:
+        stage_safe = '<span class="pill-amber">! HUMAN REVIEW</span>'
+    elif safety.allowed:
+        stage_safe = '<span class="pill-green">✔ SAFE</span>'
+    else:
+        stage_safe = '<span class="pill-red">✖ BLOCKED</span>'
 
-st.divider()
+    batch_result = st.session_state.get("batch_result")
 
+    canary_status = (
+        batch_result.get("canary_decision", "PENDING")
+        if batch_result
+        else "PENDING"
+    )
+    if canary_status == "EXPAND":
+        stage_canary = '<span class="pill-green">✔ EXPAND</span>'
+    elif canary_status in ("STOP", "ESCALATE"):
+        stage_canary = f'<span class="pill-amber">! {canary_status}</span>'
+    elif canary_status == "BLOCKED":
+        stage_canary = '<span class="pill-red">✖ BLOCKED</span>'
+    else:
+        stage_canary = '<span class="pill-blue">⚙ PENDING</span>'
 
-st.markdown(
-    '<div class="section-title">'
-    '📋 Recovery Audit Trail'
-    '</div>',
-    unsafe_allow_html=True
-)
-# =========================================
-# SAFETY CONTROL CENTER
-# =========================================
+    guardrail_status = (
+        batch_result.get("guardrail_decision", "PENDING")
+        if batch_result
+        else "PENDING"
+    )
+    if guardrail_status == "CONTINUE":
+        stage_guard = '<span class="pill-green">✔ CONTINUE</span>'
+    elif guardrail_status == "ROLLBACK":
+        stage_guard = '<span class="pill-red">↩️ ROLLBACK</span>'
+    elif guardrail_status == "STOP":
+        stage_guard = '<span class="pill-red">✖ STOP</span>'
+    else:
+        stage_guard = '<span class="pill-blue">⚙ PENDING</span>'
 
-st.markdown(
-    '<div class="section-title">'
-    '🛡️ Agent Safety Controls'
-    '</div>',
-    unsafe_allow_html=True
-)
-
-safety_col1, safety_col2, safety_col3, safety_col4 = st.columns(4)
-
-with safety_col1:
+    outcome_status = (
+        batch_result.get("final_status", "PENDING")
+        if batch_result
+        else "PENDING"
+    )
+    if outcome_status in ("RECOVERED", "COMPLETED"):
+        stage_out = '<span class="pill-green">✔ RECOVERED</span>'
+    elif outcome_status == "BLOCKED":
+        stage_out = '<span class="pill-red">✖ BLOCKED</span>'
+    else:
+        stage_out = f'<span class="pill-blue">⚙ {outcome_status}</span>'
 
     st.markdown(
-        """
-        **🟢 RECOVER**
-
-        Automated recovery is permitted only
-        when deterministic policy checks pass.
-        """
+        f"""
+        <div class="lifecycle-wrapper">
+            <div class="lifecycle-node">
+                <div class="lifecycle-node-label">Decision</div>
+                <div>{stage_dec}</div>
+            </div>
+            <div class="lifecycle-arrow">→</div>
+            <div class="lifecycle-node">
+                <div class="lifecycle-node-label">Safety Gate</div>
+                <div>{stage_safe}</div>
+            </div>
+            <div class="lifecycle-arrow">→</div>
+            <div class="lifecycle-node">
+                <div class="lifecycle-node-label">Canary</div>
+                <div>{stage_canary}</div>
+            </div>
+            <div class="lifecycle-arrow">→</div>
+            <div class="lifecycle-node">
+                <div class="lifecycle-node-label">Guardrail</div>
+                <div>{stage_guard}</div>
+            </div>
+            <div class="lifecycle-arrow">→</div>
+            <div class="lifecycle-node">
+                <div class="lifecycle-node-label">Outcome</div>
+                <div>{stage_out}</div>
+            </div>
+        </div>
+        """,
+        unsafe_allow_html=True,
     )
 
-with safety_col2:
+    run_sim = False
+    sim_human_approved = False
 
-    st.markdown(
-        """
-        **🟡 ESCALATE**
-
-        Low confidence or insufficient evidence
-        requires human review.
-        """
-    )
-
-with safety_col3:
-
-    st.markdown(
-        """
-        **🔴 STOP**
-
-        Recovery is blocked when safety limits
-        or recovery attempt limits are reached.
-        """
-    )
-
-with safety_col4:
-
-    st.markdown(
-        """
-        **↩️ ROLLBACK**
-
-        Active recovery can be reversed when
-        route performance breaches guardrails.
-        """
-    )
-
-st.caption(
-    "Persistent history of bounded agent recovery decisions."
-)
-
-
-# =========================================
-# RUN RECOVERY ANALYSIS
-# =========================================
-
-run_analysis = st.button(
-    "🚀 Run Recovery Analysis",
-    type="primary",
-    use_container_width=True
-)
-
-
-if run_analysis:
-
-    with st.spinner(
-        "Checking audit history and running recovery analysis..."
-    ):
-
-        try:
-
-            existing_incident = False
-            current_audit = load_audit_log()
-
-            if (
-                current_audit is not None
-                and not current_audit.empty
-                and "incident_time" in current_audit.columns
+    if decision_status == "RECOVER":
+        if st.button(
+            "🚀 Simulate Approved Batch Recovery",
+            type="primary",
+            use_container_width=True,
+        ):
+            run_sim = True
+            sim_human_approved = False
+    elif decision_status == "ESCALATE":
+        if human_auth_confirmed:
+            if st.button(
+                "🚀 Simulate Human-Approved Bounded Recovery",
+                type="primary",
+                use_container_width=True,
             ):
+                run_sim = True
+                sim_human_approved = True
+        else:
+            st.button(
+                "🔒 Human Review Required (Authorize in Safety Panel)",
+                disabled=True,
+                use_container_width=True,
+            )
+    elif decision_status == "ROLLBACK":
+        st.markdown(
+            """
+            <div style="background: #fef2f2; border: 1px solid #fecaca; padding: 10px; border-radius: 8px; font-size: 0.82rem; color: #991b1b; margin-bottom: 10px;">
+                <b>Guardrail Alert:</b> Alternative route post-recovery rate <b>88.39% &lt; 91.00%</b>. <b>ROLLBACK REQUIRED</b>.
+            </div>
+            """,
+            unsafe_allow_html=True,
+        )
+        if st.button(
+            "🔄 Simulate Active Recovery (Rollback Test)",
+            type="primary",
+            use_container_width=True,
+        ):
+            run_sim = True
+            sim_human_approved = True
+    elif decision_status == "STOP":
+        st.caption(
+            "Degradation is below the 5.0 pp threshold. Safety controller blocks automated route intervention."
+        )
+        if st.button(
+            "🔒 Verify Bounded Safety Gate (Simulate Blocked)",
+            use_container_width=True,
+        ):
+            run_sim = True
+            sim_human_approved = False
+    else:
+        st.success("🟢 Route Operating Normally. No recovery required.")
 
-                audit_check = current_audit.copy()
-
-                audit_check["incident_time"] = pd.to_datetime(
-                    audit_check["incident_time"],
-                    errors="coerce"
-                )
-
-                existing_incident = (
-                    audit_check["incident_time"] == incident_start
-                ).any()
-
-            if existing_incident:
-
-                st.info(
-                    "This incident is already present in the audit trail. "
-                    "No duplicate recovery event was created."
-                )
-
-            else:
-
-                execution_result = execute_orchestrated_batch_recovery(
+    if run_sim:
+        with st.spinner("Executing bounded canary simulation through orchestrator..."):
+            try:
+                batch_result = execute_orchestrated_batch_recovery(
                     transactions=transactions,
                     incident=incident,
                     decision=intelligence_result.decision,
@@ -2917,502 +2336,619 @@ if run_analysis:
                     affected_bank=affected_bank,
                     device_type=device_type,
                     batch_size=50,
-                    human_approved=(decision in ("RECOVER", "ROLLBACK")),
+                    human_approved=sim_human_approved,
                 )
+                st.session_state["batch_result"] = batch_result
+            except Exception as e:
+                st.error(f"Simulation failed: {e}")
 
-                if execution_result is not None:
+    batch_result = st.session_state.get("batch_result")
 
-                    st.success(
-                        "Recovery analysis completed and "
-                        "audit event recorded."
-                    )
+    if batch_result:
+        st.markdown("---")
+        st.markdown("**Recovery Metrics**")
+        m1, m2, m3, m4 = st.columns(4)
+        with m1:
+            st.metric(
+                "Eligible",
+                f"{batch_result.get('eligible_transactions', 0):,}",
+            )
+        with m2:
+            st.metric(
+                "Attempted",
+                f"{batch_result.get('attempted_transactions', 0):,}",
+            )
+        with m3:
+            st.metric(
+                "Recovered",
+                f"{batch_result.get('recovered_transactions', 0):,}",
+            )
+        with m4:
+            st.metric(
+                "Recovery Rate",
+                f"{batch_result.get('canary_recovery_rate', 0.0) * 100:.2f}%",
+            )
 
-                else:
+        m5, m6, m7, m8 = st.columns(4)
+        with m5:
+            st.metric(
+                "Simulated Recovered Value",
+                f"₹{batch_result.get('simulated_recovered_value', 0.0):,.2f}",
+            )
+            st.caption("SIMULATED / COUNTERFACTUAL")
+        with m6:
+            st.metric(
+                "Execution Cost",
+                f"₹{batch_result.get('execution_cost', 0.0):,.2f}",
+            )
+        with m7:
+            st.metric(
+                "Net Value",
+                f"₹{batch_result.get('net_recovered_value', 0.0):,.2f}",
+            )
+            st.caption("SIMULATED / COUNTERFACTUAL")
+        with m8:
+            st.metric(
+                "Guardrail",
+                batch_result.get("guardrail_decision", "NOT_RECORDED"),
+            )
 
-                    st.warning(
-                        "Recovery analysis could not be completed."
-                    )
 
+    # =========================================
+    # SECTION 5 — LIVE OPERATIONS & EVENT SIMULATOR
+    # =========================================
+
+    st.markdown('<div id="live-operations"></div>', unsafe_allow_html=True)
+    st.markdown(
+        '<div class="section-title">📡 Live Payment Operations & Event Stream</div>',
+        unsafe_allow_html=True,
+    )
+
+    # Initialize / retrieve live simulator instance
+    if "live_simulator" not in st.session_state:
+        st.session_state["live_simulator"] = LivePaymentSimulator(
+            scenario_name=scenario_name
+        )
+    sim = st.session_state["live_simulator"]
+    if sim.scenario_name != scenario_name:
+        sim.set_scenario(scenario_name)
+
+    # Top summary telemetry
+    if live_report:
+        lr1, lr2, lr3, lr4, lr5 = st.columns(5)
+        with lr1:
+            st.metric("Total Routes", f"{live_report.get('routes_monitored', 60)}")
+        with lr2:
+            st.metric("Healthy", f"{live_report.get('healthy_routes', 55)}")
+        with lr3:
+            st.metric("Watch", f"{live_report.get('degraded_routes', 5)}")
+        with lr4:
+            st.metric("Critical", f"{live_report.get('critical_routes', 0)}")
+        with lr5:
+            st.metric(
+                "System Success",
+                f"{live_report.get('overall_success_rate', 0.0) * 100:.2f}%",
+            )
+
+    # 1. LIVE SIMULATION CONTROLS & DEMO MODES
+    st.markdown(
+        """
+        <div class="fintech-card" style="margin-top: 14px; margin-bottom: 14px;">
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
+                <div style="font-size: 0.85rem; font-weight: 700; color: #0f172a; text-transform: uppercase;">
+                    🎛️ Live Simulation Controls
+                </div>
+                <span class="pill-blue">SIMULATED LIVE EVENTS · DEMO ONLY</span>
+            </div>
+            <div style="font-size: 0.82rem; color: #64748b; margin-bottom: 12px;">
+                Demonstrate continuous event-driven payment telemetry, webhook normalization, and automated recovery response.
+            </div>
+        """,
+        unsafe_allow_html=True,
+    )
+
+    sim_ctrl1, sim_ctrl2, sim_ctrl3, sim_ctrl4 = st.columns([1.5, 1.2, 1.2, 1.5])
+
+    with sim_ctrl1:
+        step_rate = st.selectbox(
+            "Event Ingestion Rate",
+            [
+                "Normal (5 events/step)",
+                "Slow (1 event/step)",
+                "Fast (15 events/step)",
+            ],
+            index=0,
+            help="Simulates payment event arrival rate from payment gateway",
+        )
+        batch_n = (
+            5
+            if "Normal" in step_rate
+            else (1 if "Slow" in step_rate else 15)
+        )
+
+    with sim_ctrl2:
+        st.write("")
+        st.write("")
+        if st.button("▶ Stream Events", type="primary", use_container_width=True):
+            sim.step(count=batch_n)
             st.rerun()
 
-        except Exception as e:
+    with sim_ctrl3:
+        st.write("")
+        st.write("")
+        if st.button("⏸ Pause Stream", use_container_width=True):
+            sim.pause()
+            st.info("Event stream paused.")
 
-            st.error(
-                f"Recovery analysis failed: {e}"
-            )
+    with sim_ctrl4:
+        st.write("")
+        st.write("")
+        if st.button("↻ Reset Stream", use_container_width=True):
+            sim.reset()
+            st.rerun()
 
+    st.markdown("</div>", unsafe_allow_html=True)
 
-# =========================================
-# LOAD AUDIT HISTORY
-# =========================================
-
-audit_log = load_audit_log()
-
-
-if audit_log is None:
-
-    st.info(
-        "No audit history available yet."
-    )
-
-elif audit_log.empty:
-
-    st.info(
-        "No recovery decisions have been recorded yet."
-    )
-
-else:
-
-    # =====================================
-    # SUMMARY METRICS
-    # =====================================
-
-    total_runs = len(
-        audit_log
-    )
-
-
-    approved_runs = (
-        audit_log[
-            audit_log["policy_decision"]
-            == "RECOVER"
-        ]
-        .shape[0]
-    )
-
-
-    stopped_runs = (
-        audit_log[
-            audit_log["policy_decision"]
-            == "STOP"
-        ]
-        .shape[0]
-    )
-
-
-    escalated_runs = (
-        audit_log[
-            audit_log["policy_decision"]
-            == "ESCALATE"
-        ]
-        .shape[0]
-    )
-
-
-    total_recovered = pd.to_numeric(
-        audit_log[
-            "recovered_transactions"
-        ],
-        errors="coerce"
-    ).fillna(0).sum()
-
-
-    total_expected_recovery = pd.to_numeric(
-        audit_log[
-            "expected_additional_successes"
-        ],
-        errors="coerce"
-    ).fillna(0).sum()
-
-
-    total_estimated_value = pd.to_numeric(
-        audit_log[
-            "estimated_recovered_value"
-        ],
-        errors="coerce"
-    ).fillna(0).sum()
-
-
-    total_simulated_value = pd.to_numeric(
-        audit_log[
-            "simulated_recovered_value"
-        ],
-        errors="coerce"
-    ).fillna(0).sum()
-
-
+    # 2. WEBHOOK INGESTION PIPELINE VISUALIZATION
     st.markdown(
-        '<div class="audit-card">',
-        unsafe_allow_html=True
+        f"""
+        <div class="lifecycle-wrapper" style="margin-bottom: 16px;">
+            <div class="lifecycle-node">
+                <div class="lifecycle-node-label">Webhook Ingestion</div>
+                <div><span class="pill-green">✔ WEBHOOK RECEIVED</span></div>
+                <div style="font-size: 0.70rem; color: #64748b; margin-top: 4px;">{sim.last_pipeline_status['last_event_id'] or 'PAY_10480'}</div>
+            </div>
+            <div class="lifecycle-arrow">→</div>
+            <div class="lifecycle-node">
+                <div class="lifecycle-node-label">Normalization</div>
+                <div><span class="pill-green">✔ EVENT NORMALIZED</span></div>
+                <div style="font-size: 0.70rem; color: #64748b; margin-top: 4px;">{sim.last_pipeline_status['last_event_type'] or 'payment.captured'}</div>
+            </div>
+            <div class="lifecycle-arrow">→</div>
+            <div class="lifecycle-node">
+                <div class="lifecycle-node-label">Telemetry Engine</div>
+                <div><span class="pill-green">✔ STATS UPDATED</span></div>
+                <div style="font-size: 0.70rem; color: #64748b; margin-top: 4px;">{sim.webhook_count} events ingested</div>
+            </div>
+        </div>
+        """,
+        unsafe_allow_html=True,
     )
 
+    # 3. REAL-TIME ROUTE HEALTH
+    st.markdown("**Real-Time Route Telemetry**")
+    r_cols = st.columns(4)
+    for idx, (rk, rt) in enumerate(sim.routes.items()):
+        with r_cols[idx % 4]:
+            if rt.status == "CRITICAL":
+                card_style = "border: 1px solid #fecaca; background: #fef2f2;"
+                pill = '<span class="pill-red">CRITICAL</span>'
+            elif rt.status == "WATCH":
+                card_style = "border: 1px solid #fde68a; background: #fffbeb;"
+                pill = '<span class="pill-amber">WATCH</span>'
+            else:
+                card_style = "border: 1px solid #e2e8f0; background: #ffffff;"
+                pill = '<span class="pill-green">HEALTHY</span>'
 
-    col1, col2, col3, col4 = st.columns(4)
-
-
-    with col1:
-
-        st.metric(
-            "Recovery Runs",
-            f"{total_runs:,}"
-        )
-
-
-    with col2:
-
-        st.metric(
-            "Approved",
-            f"{approved_runs:,}"
-        )
-
-
-    with col3:
-
-        st.metric(
-            "Stopped",
-            f"{stopped_runs:,}"
-        )
-
-
-    with col4:
-
-        st.metric(
-            "Escalated",
-            f"{escalated_runs:,}"
-        )
-
-
-    st.markdown(
-        "</div>",
-        unsafe_allow_html=True
-    )
-
-
-    # =====================================
-    # CUMULATIVE RECOVERY
-    # =====================================
-
-    c1, c2, c3 = st.columns(3)
-
-
-    with c1:
-
-        st.metric(
-            "Expected Additional Successes",
-            f"{total_expected_recovery:,.1f}"
-        )
-
-
-    with c2:
-
-        st.metric(
-            "Simulated Recoveries",
-            f"{int(total_recovered):,}"
-        )
-
-
-    with c3:
-
-        st.metric(
-            "Estimated Recovery Value",
-            f"₹{total_estimated_value:,.2f}"
-        )
-
-
-    st.caption(
-        f"Cumulative simulated recovered value: "
-        f"₹{total_simulated_value:,.2f}"
-    )
-
-
-    # =====================================
-    # AUDIT TABLE
-    # =====================================
-
-    st.markdown(
-        "### Decision History"
-    )
-
-
-    audit_display = audit_log.copy()
-
-
-    # -------------------------------------
-    # Timestamp
-    # -------------------------------------
-
-    if "timestamp" in audit_display.columns:
-
-        audit_display[
-            "timestamp"
-        ] = pd.to_datetime(
-            audit_display[
-                "timestamp"
-            ],
-            errors="coerce"
-        )
-
-
-    # -------------------------------------
-    # Route
-    # -------------------------------------
-
-    if all(
-        column in audit_display.columns
-        for column in [
-            "payment_method",
-            "affected_bank",
-            "device_type"
-        ]
-    ):
-
-        audit_display[
-            "route"
-        ] = (
-            audit_display[
-                "payment_method"
-            ].astype(str)
-            + " → "
-            + audit_display[
-                "affected_bank"
-            ].astype(str)
-            + " → "
-            + audit_display[
-                "device_type"
-            ].astype(str)
-        )
-
-
-    # -------------------------------------
-    # Numeric formatting
-    # -------------------------------------
-
-    numeric_columns = [
-        "success_rate_before",
-        "success_rate_after",
-        "success_improvement_pp",
-        "expected_additional_successes",
-        "estimated_recovered_value",
-        "simulated_recovered_value",
-        "average_transaction_value"
-    ]
-
-
-    for column in numeric_columns:
-
-        if column in audit_display.columns:
-
-            audit_display[column] = pd.to_numeric(
-                audit_display[column],
-                errors="coerce"
+            success_color = (
+                "#dc2626" if rt.degradation_pp >= 5 else "#059669"
             )
 
-
-    # -------------------------------------
-    # DISPLAY TABLE
-    # -------------------------------------
-
-    display_columns = [
-        "timestamp",
-        "incident_time",
-        "route",
-        "recommended_bank",
-        "policy_decision",
-        "policy_approved",
-        "incident_transactions",
-        "failed_transactions",
-        "eligible_transactions",
-        "recovered_transactions",
-        "remaining_failed",
-        "stopped_transactions",
-        "escalated_transactions",
-        "success_improvement_pp",
-        "expected_additional_successes",
-        "estimated_recovered_value"
-    ]
-
-
-    display_columns = [
-        column
-        for column in display_columns
-        if column in audit_display.columns
-    ]
-
-
-    formatted_audit = (
-        audit_display[
-            display_columns
-        ]
-        .sort_values(
-            "timestamp",
-            ascending=False
-        )
-    )
-
-
-    rename_map = {
-
-        "timestamp":
-            "Run Time",
-
-        "incident_time":
-            "Incident",
-
-        "route":
-            "Route",
-
-        "recommended_bank":
-            "Recommended Bank",
-
-        "policy_decision":
-            "Decision",
-
-        "policy_approved":
-            "Approved",
-
-        "incident_transactions":
-            "Incident Txns",
-
-        "failed_transactions":
-            "Failed",
-
-        "eligible_transactions":
-            "Eligible",
-
-        "recovered_transactions":
-            "Recovered",
-
-        "remaining_failed":
-            "Remaining Failed",
-
-        "stopped_transactions":
-            "Stopped",
-
-        "escalated_transactions":
-            "Escalated",
-
-        "success_improvement_pp":
-            "Improvement (pp)",
-
-        "expected_additional_successes":
-            "Expected +Success",
-
-        "estimated_recovered_value":
-            "Estimated Recovery"
-    }
-
-
-    formatted_audit = (
-        formatted_audit.rename(
-            columns=rename_map
-        )
-    )
-
-
-    st.dataframe(
-        formatted_audit.style.format(
-            {
-                "Improvement (pp)":
-                    "{:.2f}",
-
-                "Expected +Success":
-                    "{:.1f}",
-
-                "Estimated Recovery":
-                    "₹{:,.2f}"
-            },
-            na_rep="-"
-        ),
-        use_container_width=True,
-        hide_index=True
-    )
-
-
-# =========================================
-# CONTINUOUS ROUTE LEARNING & EVIDENCE
-# =========================================
-
-st.divider()
-
-st.markdown(
-    '<div class="section-title">'
-    '🧠 Continuous Recovery Learning & Evidence'
-    '</div>',
-    unsafe_allow_html=True
-)
-
-st.caption(
-    "Bayesian route-level intelligence learned from verified recovery outcomes across payment routes."
-)
-
-try:
-    history_loader = PersistentLearningHistory()
-    learned_routes = history_loader.load()
-
-    if learned_routes:
-        total_learned_routes = len(learned_routes)
-        total_attempts = sum(r.attempts for r in learned_routes)
-        total_recoveries = sum(r.recoveries for r in learned_routes)
-        total_net_value = sum(r.net_recovered_value for r in learned_routes)
-
-        l1, l2, l3, l4 = st.columns(4)
-
-        with l1:
-            st.metric(
-                "Learned Routes",
-                f"{total_learned_routes}"
+            st.markdown(
+                f"""
+                <div class="fintech-card" style="{card_style} padding: 12px; margin-bottom: 12px;">
+                    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px;">
+                        <div style="font-size: 0.70rem; font-weight: 700; color: #64748b;">{rt.payment_method} · {rt.device}</div>
+                        {pill}
+                    </div>
+                    <div style="font-size: 0.95rem; font-weight: 700; color: #0f172a; margin-bottom: 8px;">
+                        {rt.bank}
+                    </div>
+                    <div style="display: flex; justify-content: space-between; font-size: 0.78rem;">
+                        <span style="color: #64748b;">Success:</span>
+                        <span style="font-weight: 700; color: {success_color};">{rt.success_rate * 100:.2f}%</span>
+                    </div>
+                    <div style="display: flex; justify-content: space-between; font-size: 0.78rem;">
+                        <span style="color: #64748b;">Txns / Fails:</span>
+                        <span style="font-weight: 600;">{rt.transactions:,} / {rt.failures:,}</span>
+                    </div>
+                </div>
+                """,
+                unsafe_allow_html=True,
             )
 
-        with l2:
-            st.metric(
-                "Cumulative Attempts",
-                f"{total_attempts:,}"
-            )
+    # 4. LIVE INCIDENT DETECTION & AI ROUTING DECISION
+    inc_det = sim.get_incident_detection()
+    ai_dec = sim.get_ai_decision()
+    safety_g = sim.get_safety_gate()
 
-        with l3:
-            st.metric(
-                "Verified Recoveries",
-                f"{total_recoveries:,}"
-            )
-
-        with l4:
-            st.metric(
-                "Net Recovered Value",
-                f"₹{total_net_value:,.2f}"
-            )
-
-        learning_rows = []
-        for r in learned_routes:
-            learning_rows.append({
-                "Route": r.route,
-                "Attempts": r.attempts,
-                "Recoveries": r.recoveries,
-                "Recovery Rate": f"{r.recovery_rate * 100:.1f}%",
-                "Recovered Value": f"₹{r.total_recovered_value:,.2f}",
-                "Execution Cost": f"₹{r.total_execution_cost:,.2f}",
-                "Net Value": f"₹{r.net_recovered_value:,.2f}",
-                "Evidence Confidence": f"{r.evidence_confidence * 100:.1f}%",
-            })
-
-        st.dataframe(
-            pd.DataFrame(learning_rows),
-            use_container_width=True,
-            hide_index=True
+    if inc_det:
+        st.markdown(
+            f"""
+            <div class="incident-card-critical" style="margin-top: 10px; margin-bottom: 14px;">
+                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px;">
+                    <div style="font-size: 0.80rem; font-weight: 700; color: #dc2626; text-transform: uppercase;">
+                        ⚠ Route Degradation Detected
+                    </div>
+                    <span class="pill-red">SEVERITY: {inc_det['severity']}</span>
+                </div>
+                <div style="font-size: 1.15rem; font-weight: 700; color: #0f172a; margin-bottom: 10px;">
+                    {inc_det['route']} dropped to {inc_det['current_success_rate'] * 100:.2f}% (Baseline: {inc_det['baseline_success_rate'] * 100:.2f}%)
+                </div>
+                <div style="display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; border-top: 1px solid #fee2e2; padding-top: 8px;">
+                    <div><span style="font-size: 0.72rem; color: #64748b;">Degradation:</span><br><b style="color: #dc2626;">-{inc_det['degradation_pp']:.2f} pp</b></div>
+                    <div><span style="font-size: 0.72rem; color: #64748b;">Failed Txns:</span><br><b>{inc_det['failed_transactions']:,}</b></div>
+                    <div><span style="font-size: 0.72rem; color: #64748b;">Excess Failures:</span><br><b>{inc_det['excess_failures']:.1f}</b></div>
+                    <div><span style="font-size: 0.72rem; color: #64748b;">Revenue at Risk:</span><br><b style="color: #dc2626;">₹{inc_det['revenue_at_risk']:,.0f}</b></div>
+                </div>
+            </div>
+            """,
+            unsafe_allow_html=True,
         )
 
+        sim_dec1, sim_dec2 = st.columns(2)
+        with sim_dec1:
+            st.markdown(
+                f"""
+                <div class="decision-card" style="height: 100%;">
+                    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px;">
+                        <div style="font-size: 0.75rem; font-weight: 700; color: #0284c7; text-transform: uppercase;">
+                            AI Routing Decision
+                        </div>
+                        <span class="pill-blue">CONFIDENCE: {ai_dec['confidence'] * 100:.0f}%</span>
+                    </div>
+                    <div style="font-size: 1.05rem; font-weight: 700; color: #0f172a; margin-bottom: 8px;">
+                        {ai_dec['recommended_action']}
+                    </div>
+                    <div style="font-size: 0.80rem; color: #475569; margin-bottom: 10px;">
+                        {ai_dec['explanation']}
+                    </div>
+                    <div style="font-size: 0.75rem; color: #64748b; border-top: 1px solid #f1f5f9; padding-top: 6px;">
+                        Expected Loss: ₹{ai_dec['expected_loss_before']:,.0f} → ₹{ai_dec['expected_loss_after']:,.0f}
+                    </div>
+                </div>
+                """,
+                unsafe_allow_html=True,
+            )
+
+        with sim_dec2:
+            auth_status = (
+                "✔ Simulation authorized by operator"
+                if sim.operator_authorized
+                else "Operator authorization required to simulate bounded routing"
+            )
+            st.markdown(
+                f"""
+                <div class="fintech-card" style="height: 100%; border: 1px solid #bae6fd; background: #f0f9ff;">
+                    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px;">
+                        <div style="font-size: 0.75rem; font-weight: 700; color: #0369a1; text-transform: uppercase;">
+                            Live Route Switch Simulation
+                        </div>
+                        <span class="pill-blue">COUNTERFACTUAL / DEMO ONLY</span>
+                    </div>
+                    <div style="font-size: 0.95rem; font-weight: 600; color: #0f172a; margin-bottom: 8px;">
+                        Bank_X (DEGRADED) → Bank_A (HEALTHY)
+                    </div>
+                    <div style="font-size: 0.80rem; color: #475569; margin-bottom: 10px;">
+                        Production Safety: <b>{safety_g['production_safety']}</b><br>
+                        {safety_g['reason']}
+                    </div>
+                    <div style="font-size: 0.75rem; color: #0369a1; border-top: 1px solid #bae6fd; padding-top: 6px;">
+                        {auth_status}
+                    </div>
+                </div>
+                """,
+                unsafe_allow_html=True,
+            )
     else:
-        st.info("No route learning observations recorded yet.")
+        st.success(
+            "🟢 All monitored routes operating normally within baseline guardrails. No degradation detected."
+        )
 
-except Exception as e:
-    st.warning(f"Could not load recovery learning history: {e}")
+    # 5. LIVE PAYMENT EVENT STREAM PANEL
+    st.markdown("**Live Payment Event Stream**")
+    st.caption(
+        "Continuous simulated incoming transaction feed. Labeled: SIMULATED LIVE EVENTS."
+    )
 
+    df_events = sim.get_events_dataframe()
+    if not df_events.empty:
+        st.dataframe(
+            df_events.head(15),
+            use_container_width=True,
+            hide_index=True,
+        )
+    else:
+        st.info("No events in buffer. Click 'Stream Events' to start ingestion.")
+
+    # 6. SIMULATED AUDIT LIFECYCLE TRACKER
+    if sim.lifecycle_log:
+        with st.expander("📋 Live Event Ingestion & Recovery Lifecycle Audit", expanded=False):
+            st.markdown(
+                """
+                <div class="timeline-track" style="margin-top: 8px;">
+                """,
+                unsafe_allow_html=True,
+            )
+            for item in sim.lifecycle_log[:8]:
+                st.markdown(
+                    f"""
+                    <div class="timeline-step">
+                        <div class="timeline-marker timeline-marker-success"></div>
+                        <div style="font-weight: 600; font-size: 0.82rem; color: #0f172a;">{item['time']} · {item['step']}</div>
+                        <div style="font-size: 0.74rem; color: #64748b;">{item['detail']}</div>
+                    </div>
+                    """,
+                    unsafe_allow_html=True,
+                )
+            st.markdown("</div>", unsafe_allow_html=True)
+
+    # Monitored Route Health Table from live report
+    with st.expander("📊 Full Monitored Route Health Directory (60 Routes)", expanded=False):
+        rh_data = live_report.get("route_health", [])
+        if rh_data:
+            df_rh = pd.DataFrame(rh_data)
+            rh_cols = [
+                c
+                for c in [
+                    "route",
+                    "transactions",
+                    "failures",
+                    "success_rate",
+                    "degradation_pp",
+                    "severity",
+                ]
+                if c in df_rh.columns
+            ]
+            df_rh_disp = df_rh[rh_cols].copy()
+            if "success_rate" in df_rh_disp.columns:
+                df_rh_disp["success_rate"] = df_rh_disp[
+                    "success_rate"
+                ].apply(lambda v: f"{v * 100:.2f}%")
+            if "degradation_pp" in df_rh_disp.columns:
+                df_rh_disp["degradation_pp"] = df_rh_disp[
+                    "degradation_pp"
+                ].apply(lambda v: f"{v:.2f}")
+
+            df_rh_disp = df_rh_disp.rename(
+                columns={
+                    "route": "Route",
+                    "transactions": "Transactions",
+                    "failures": "Failures",
+                    "success_rate": "Success Rate",
+                    "degradation_pp": "Degradation (pp)",
+                    "severity": "Severity",
+                }
+            )
+            st.dataframe(df_rh_disp, use_container_width=True, hide_index=True)
+
+
+    # =========================================
+    # SECTION 6 — CONTINUOUS LEARNING
+    # =========================================
+
+    st.markdown('<div id="recovery-learning"></div>', unsafe_allow_html=True)
+    st.markdown(
+        '<div class="section-title">🧠 Recovery Learning</div>',
+        unsafe_allow_html=True,
+    )
+
+    try:
+        history_loader = PersistentLearningHistory()
+        learned_routes = history_loader.load()
+
+        if learned_routes:
+            l1, l2, l3, l4 = st.columns(4)
+            with l1:
+                st.metric("Learned Routes", f"{len(learned_routes)}")
+            with l2:
+                st.metric(
+                    "Total Attempts",
+                    f"{sum(r.attempts for r in learned_routes):,}",
+                )
+            with l3:
+                st.metric(
+                    "Verified Recoveries",
+                    f"{sum(r.recoveries for r in learned_routes):,}",
+                )
+            with l4:
+                st.metric(
+                    "Net Recovered Value",
+                    f"₹{sum(r.net_recovered_value for r in learned_routes):,.2f}",
+                )
+
+            st.caption(
+                "Recovery outcomes continuously update route-level evidence used by future recovery decisions."
+            )
+
+            learning_rows = []
+            for r in learned_routes:
+                learning_rows.append(
+                    {
+                        "Route": r.route,
+                        "Attempts": r.attempts,
+                        "Recoveries": r.recoveries,
+                        "Recovery Rate": f"{r.recovery_rate * 100:.1f}%",
+                        "Net Value": f"₹{r.net_recovered_value:,.2f}",
+                        "Evidence Confidence": f"{r.evidence_confidence * 100:.1f}%",
+                    }
+                )
+            st.dataframe(
+                pd.DataFrame(learning_rows),
+                use_container_width=True,
+                hide_index=True,
+            )
+        else:
+            st.info("No route learning observations recorded yet.")
+    except Exception as e:
+        st.warning(f"Could not load recovery learning history: {e}")
+
+
+    # =========================================
+    # SECTION 7 — AUDIT TRAIL
+    # =========================================
+
+    st.markdown('<div id="recovery-audit-trail"></div>', unsafe_allow_html=True)
+    st.markdown(
+        '<div class="section-title">📋 Audit Trail</div>',
+        unsafe_allow_html=True,
+    )
+
+    # Vertical timeline
+    st.markdown(
+        """
+        <div class="timeline-track">
+            <div class="timeline-step">
+                <div class="timeline-marker timeline-marker-success"></div>
+                <div style="font-weight: 600; font-size: 0.88rem; color: #0f172a;">Incident detected</div>
+                <div style="font-size: 0.76rem; color: #64748b;">Sliding window detector observes anomalous route drop against baseline.</div>
+            </div>
+            <div class="timeline-step">
+                <div class="timeline-marker timeline-marker-success"></div>
+                <div style="font-weight: 600; font-size: 0.88rem; color: #0f172a;">Risk quantified</div>
+                <div style="font-size: 0.76rem; color: #64748b;">Excess failures and business revenue at risk computed against historical expected failures.</div>
+            </div>
+            <div class="timeline-step">
+                <div class="timeline-marker timeline-marker-success"></div>
+                <div style="font-weight: 600; font-size: 0.88rem; color: #0f172a;">AI decision generated</div>
+                <div style="font-size: 0.76rem; color: #64748b;">IncidentDecisionEngine evaluates candidate routes and determines optimal action.</div>
+            </div>
+            <div class="timeline-step">
+                <div class="timeline-marker timeline-marker-warn"></div>
+                <div style="font-weight: 600; font-size: 0.88rem; color: #0f172a;">Safety decision recorded</div>
+                <div style="font-size: 0.76rem; color: #64748b;">Deterministic SafetyController verifies confidence, limits, and review requirements.</div>
+            </div>
+            <div class="timeline-step">
+                <div class="timeline-marker"></div>
+                <div style="font-weight: 600; font-size: 0.88rem; color: #0f172a;">Human approval (if applicable)</div>
+                <div style="font-size: 0.76rem; color: #64748b;">Operator authorization logged for simulation when human review is required.</div>
+            </div>
+            <div class="timeline-step">
+                <div class="timeline-marker"></div>
+                <div style="font-weight: 600; font-size: 0.88rem; color: #0f172a;">Canary executed</div>
+                <div style="font-size: 0.76rem; color: #64748b;">Bounded batch traffic evaluated on target alternative route.</div>
+            </div>
+            <div class="timeline-step">
+                <div class="timeline-marker"></div>
+                <div style="font-weight: 600; font-size: 0.88rem; color: #0f172a;">Guardrail evaluated</div>
+                <div style="font-size: 0.76rem; color: #64748b;">Circuit breaker ensures alternative route remains healthy without degradation.</div>
+            </div>
+            <div class="timeline-step">
+                <div class="timeline-marker"></div>
+                <div style="font-weight: 600; font-size: 0.88rem; color: #0f172a;">Outcome verified</div>
+                <div style="font-size: 0.76rem; color: #64748b;">Simulation results and counterfactual recoveries confirmed.</div>
+            </div>
+            <div class="timeline-step">
+                <div class="timeline-marker timeline-marker-success"></div>
+                <div style="font-weight: 600; font-size: 0.88rem; color: #0f172a;">Learning updated</div>
+                <div style="font-size: 0.76rem; color: #64748b;">Route-level Bayesian evidence continuously updated in recovery learning log.</div>
+            </div>
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
+
+    run_an_col1, run_an_col2 = st.columns([1.2, 2.8])
+    with run_an_col1:
+        if st.button(
+            "🚀 Run Recovery Analysis", type="primary", use_container_width=True
+        ):
+            with st.spinner("Executing authoritative analysis..."):
+                try:
+                    execute_orchestrated_batch_recovery(
+                        transactions=transactions,
+                        incident=incident,
+                        decision=intelligence_result.decision,
+                        safety=safety,
+                        recovery=recovery,
+                        payment_method=payment_method,
+                        affected_bank=affected_bank,
+                        device_type=device_type,
+                        batch_size=50,
+                        human_approved=(
+                            decision_status in ("RECOVER", "ROLLBACK")
+                        ),
+                    )
+                    st.success("Recovery analysis recorded to audit trail.")
+                    st.rerun()
+                except Exception as ex:
+                    st.error(f"Analysis error: {ex}")
+
+    with run_an_col2:
+        st.caption(
+            "Executes end-to-end recovery evaluation through the authoritative RecoveryOrchestrator and appends the outcome to the audit log."
+        )
+
+    # Audit history table
+    audit_data = load_audit_log()
+    if audit_data is not None and not audit_data.empty:
+        st.markdown("**Decision History Log**")
+        audit_display = audit_data.copy()
+        if "timestamp" in audit_display.columns:
+            audit_display["timestamp"] = pd.to_datetime(
+                audit_display["timestamp"], errors="coerce"
+            )
+
+        if all(
+            col in audit_display.columns
+            for col in ["payment_method", "affected_bank", "device_type"]
+        ):
+            audit_display["route"] = (
+                audit_display["payment_method"].astype(str)
+                + " → "
+                + audit_display["affected_bank"].astype(str)
+                + " → "
+                + audit_display["device_type"].astype(str)
+            )
+
+        disp_cols = [
+            c
+            for c in [
+                "timestamp",
+                "incident_time",
+                "route",
+                "recommended_bank",
+                "policy_decision",
+                "policy_approved",
+                "recovered_transactions",
+                "success_improvement_pp",
+                "estimated_recovered_value",
+            ]
+            if c in audit_display.columns
+        ]
+
+        formatted_audit = (
+            audit_display[disp_cols]
+            .sort_values("timestamp", ascending=False)
+            .rename(
+                columns={
+                    "timestamp": "Run Time",
+                    "incident_time": "Incident",
+                    "route": "Route",
+                    "recommended_bank": "Target Bank",
+                    "policy_decision": "Decision",
+                    "policy_approved": "Approved",
+                    "recovered_transactions": "Recovered",
+                    "success_improvement_pp": "Improvement (pp)",
+                    "estimated_recovered_value": "Recovered Value",
+                }
+            )
+        )
+        st.dataframe(
+            formatted_audit.head(15), use_container_width=True, hide_index=True
+        )
+    else:
+        st.info("No audit history recorded yet.")
 
 # =========================================
 # FOOTER
 # =========================================
 
-st.divider()
-
-
 st.markdown(
     """
-<div class="footer">
-
-AI Payment Recovery Agent ·
-Simulation Environment ·
-No real payment routing or payment processing is performed
-
-</div>
-""",
-    unsafe_allow_html=True
+    <div class="footer-text">
+        AI Payment Reliability Center · Simulation Environment · No real payment routing or payment processing is performed
+    </div>
+    """,
+    unsafe_allow_html=True,
 )
