@@ -20,6 +20,16 @@ from src.decision.incident_decision_engine import (
     IncidentDecisionEngine
 )
 
+from src.decision.decision_explanation import (
+    DecisionExplanation,
+    build_decision_explanation,
+)
+
+from src.models.domain import (
+    LossEstimate,
+    RiskAssessment,
+)
+
 from src.recovery.recovery_orchestrator import (
     RecoveryOrchestrator
 )
@@ -1178,7 +1188,14 @@ average_transaction_value = float(
 
 try:
 
-    decision_engine = IncidentDecisionEngine()
+    if "learning_history" not in st.session_state:
+        st.session_state["learning_history"] = PersistentLearningHistory()
+
+    learning_history = st.session_state["learning_history"]
+
+    decision_engine = IncidentDecisionEngine(
+        learning_history=learning_history
+    )
 
     revenue_impact_obj = None
     if impact:
@@ -2006,66 +2023,237 @@ recovery action is permitted.
         unsafe_allow_html=True,
     )
 
-    rec_action = intelligence_decision.recommended_action
-    conf_str = f"{intelligence_decision.confidence * 100:.0f}%"
+    # ---------------------------------------------------------
+    # Build Deterministic Decision Explanation
+    # ---------------------------------------------------------
+    route_ctx = None
+    if intelligence_result and intelligence_result.ranked_routes:
+        best_candidate = intelligence_result.ranked_routes[0]
+        route_ctx = {
+            "route": getattr(best_candidate, "route", ""),
+            "observed_success_rate": getattr(best_candidate, "observed_success_rate", None),
+            "adjusted_success_rate": getattr(best_candidate, "adjusted_success_rate", None),
+            "evidence_confidence": getattr(best_candidate, "evidence_confidence", None),
+            "score": getattr(best_candidate, "score", None),
+            "explanation": getattr(best_candidate, "explanation", ""),
+        }
+    elif recovery:
+        route_ctx = {
+            "route": f"{payment_method} + {recovery.get('alternative_bank', '')} + {device_type}",
+            "observed_success_rate": recovery.get("alternative_success_rate"),
+            "adjusted_success_rate": recovery.get("simulated_success_rate"),
+            "explanation": recovery.get("reason", ""),
+        }
 
-    d_col1, d_col2 = st.columns([1.5, 1])
+    risk_assessment = None
+    loss_estimate = None
+    if intelligence_result:
+        loss_estimate = LossEstimate(
+            payment_id=f"inc_{incident.get('incident_id', 'unknown')}",
+            financial_exposure=intelligence_result.financial_exposure,
+            probability_of_loss=max(0.0, min(1.0, degradation / 100.0)) if degradation else 0.5,
+            expected_loss=intelligence_result.expected_loss,
+            currency="INR",
+        )
+        risk_assessment = RiskAssessment(
+            payment_id=f"inc_{incident.get('incident_id', 'unknown')}",
+            risk_score=round(min(1.0, degradation / 50.0), 2) if degradation else 0.5,
+            risk_level=intelligence_result.severity,
+            probability_of_loss=round(max(0.0, min(1.0, degradation / 100.0)), 2) if degradation else 0.5,
+            risk_type="ROUTE_DEGRADATION",
+            reasons=[f"Observed degradation of {degradation:.1f} pp on route"],
+        )
 
-    with d_col1:
-        st.markdown(
-            f"""
-            <div class="decision-card">
-                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
-                    <div style="font-size: 0.78rem; font-weight: 700; color: #0284c7; text-transform: uppercase;">
-                        AI Recommendation
-                    </div>
-                    <span class="pill-blue">CONFIDENCE: {conf_str}</span>
+    decision_explanation = build_decision_explanation(
+        decision=intelligence_decision,
+        risk_assessment=risk_assessment,
+        loss_estimate=loss_estimate,
+        safety_decision=safety,
+        route_context=route_ctx,
+    )
+
+    # Incident Matters summary
+    if degradation >= 20 or (intelligence_result and intelligence_result.severity == "CRITICAL"):
+        incident_matters_text = "Critical route degradation caused elevated expected loss."
+    else:
+        loss_val = intelligence_result.expected_loss if intelligence_result else 0.0
+        incident_matters_text = f"Route degradation of {degradation:.1f} pp caused elevated expected loss of ₹{loss_val:,.0f}."
+
+    # Format Key Factors with visual icons
+    def _format_kf_item(kf_text: str) -> tuple[str, str, str]:
+        lower = kf_text.lower()
+        if "safety gate blocked" in lower:
+            return "✕", "#ef4444", kf_text
+        elif "human review" in lower:
+            return "⚠", "#f59e0b", "Human review required"
+        elif "route degradation" in lower or "degradation" in lower:
+            return "✓", "#10b981", "Critical route degradation"
+        elif "expected loss" in lower:
+            return "✓", "#10b981", "High expected loss"
+        elif "stronger evidence" in lower or "alternative route" in lower:
+            return "✓", "#10b981", "Alternative route has stronger evidence"
+        elif "confidence" in lower:
+            return "✓", "#10b981", "High decision confidence"
+        elif "safety policy passed" in lower or "safe to execute" in lower:
+            return "✓", "#10b981", "Safety gate passed"
+        elif "positive estimated recovery" in lower or "recovery value" in lower:
+            return "✓", "#10b981", "Positive recovery value projected"
+        elif "elevated risk" in lower:
+            return "✓", "#10b981", "Elevated route risk"
+        return "✓", "#10b981", kf_text
+
+    kf_items_html = []
+    for kf in decision_explanation.key_factors:
+        icon, icon_color, label = _format_kf_item(kf)
+        kf_items_html.append(
+            f'<div style="display: flex; align-items: center; gap: 8px; font-size: 0.85rem; color: #1e293b; line-height: 1.45;">'
+            f'<span style="color: {icon_color}; font-weight: 800; font-size: 0.95rem;">{icon}</span>'
+            f'<span>{label}</span>'
+            f'</div>'
+        )
+    key_factors_html = "\n".join(kf_items_html) if kf_items_html else '<div style="color: #94a3b8; font-size: 0.82rem;">No specific factors recorded.</div>'
+
+    # Alternatives HTML
+    alt_items_html = []
+    if decision_explanation.alternative_actions:
+        for alt_str in decision_explanation.alternative_actions:
+            if " (" in alt_str and alt_str.endswith(")"):
+                action_part, details_part = alt_str.split(" (", 1)
+                details_clean = details_part[:-1]
+            else:
+                action_part = alt_str
+                details_clean = "Evaluated"
+
+            alt_items_html.append(
+                f'<div style="display: flex; justify-content: space-between; align-items: center; padding: 6px 0; border-bottom: 1px dashed #f1f5f9; font-size: 0.82rem;">'
+                f'<span style="font-weight: 600; color: #1e293b; font-family: monospace; font-size: 0.78rem;">{action_part}</span>'
+                f'<span style="color: #64748b; font-size: 0.74rem;">{details_clean}</span>'
+                f'</div>'
+            )
+    alternatives_html = "\n".join(alt_items_html) if alt_items_html else '<div style="color: #94a3b8; font-size: 0.82rem;">No alternative interventions evaluated.</div>'
+
+    # Safety status styling
+    if safety.allowed:
+        safety_badge_text = "✓ AUTOMATION ALLOWED"
+        safety_review_text = "Required" if safety.requires_human_review else "Not required"
+        safety_bg = "#f0fdf4"
+        safety_border = "#bbf7d0"
+        safety_header_color = "#15803d"
+        safety_title_color = "#15803d"
+    elif safety.requires_human_review:
+        safety_badge_text = "⚠ HUMAN REVIEW REQUIRED"
+        safety_review_text = "Required"
+        safety_bg = "#fffbeb"
+        safety_border = "#fde68a"
+        safety_header_color = "#b45309"
+        safety_title_color = "#b45309"
+    else:
+        safety_badge_text = "✕ AUTOMATION BLOCKED"
+        safety_review_text = "Required" if safety.requires_human_review else "Not required"
+        safety_bg = "#fef2f2"
+        safety_border = "#fecaca"
+        safety_header_color = "#b91c1c"
+        safety_title_color = "#b91c1c"
+
+    conf_display = f"{intelligence_decision.confidence * 100:.2f}%"
+
+    st.markdown(
+        f"""
+        <div class="decision-card" style="border-left: 4px solid #0284c7; padding: 1.5rem; margin-bottom: 1.25rem;">
+            <!-- Brand / Header -->
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem;">
+                <div style="font-size: 1.15rem; font-weight: 800; color: #0f172a; display: flex; align-items: center; gap: 8px;">
+                    🤖 AI DECISION INTELLIGENCE
                 </div>
-                <div style="font-size: 1.35rem; font-weight: 700; color: #0f172a; margin-bottom: 12px;">
-                    {rec_action}
-                </div>
-                <div style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; padding-top: 10px; border-top: 1px solid #f1f5f9;">
-                    <div>
-                        <div style="font-size: 0.72rem; color: #64748b;">Expected Loss Before</div>
-                        <div style="font-size: 1rem; font-weight: 600; color: #64748b;">₹{intelligence_decision.expected_loss_before:,.0f}</div>
-                    </div>
-                    <div>
-                        <div style="font-size: 0.72rem; color: #64748b;">Expected Loss After</div>
-                        <div style="font-size: 1rem; font-weight: 600; color: #059669;">₹{intelligence_decision.expected_loss_after:,.0f}</div>
-                    </div>
-                    <div>
-                        <div style="font-size: 0.72rem; color: #64748b;">Estimated Recovery</div>
-                        <div style="font-size: 1rem; font-weight: 700; color: #0284c7;">₹{intelligence_decision.estimated_value:,.0f}*</div>
-                    </div>
-                </div>
-                <div style="font-size: 0.72rem; color: #94a3b8; margin-top: 8px;">*Simulated counterfactual projection</div>
+                <span class="pill-blue" style="font-size: 0.76rem; font-weight: 700;">DETERMINISTIC & AUDITABLE</span>
             </div>
-            """,
-            unsafe_allow_html=True,
-        )
 
-    with d_col2:
-        gemini_diag = (
-            ai_diagnosis["primary_diagnosis"]
-            if ai_diagnosis
-            else "AI advisory diagnosis based on observed telemetry."
-        )
-        st.markdown(
-            f"""
-            <div class="fintech-card">
-                <div style="font-size: 0.82rem; font-weight: 700; color: #0f172a; margin-bottom: 6px;">
-                    Why This Decision?
+            <!-- WHY THIS INCIDENT MATTERS -->
+            <div style="background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 8px; padding: 12px 14px; margin-bottom: 14px;">
+                <div style="font-size: 0.72rem; font-weight: 700; color: #64748b; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 4px;">
+                    WHY THIS INCIDENT MATTERS
                 </div>
-                <div style="font-size: 0.82rem; color: #475569; line-height: 1.5; margin-bottom: 10px;">
-                    {intelligence_decision.explanation}
-                </div>
-                <div style="font-size: 0.75rem; color: #64748b; background: #f8fafc; padding: 8px; border-radius: 6px; border: 1px solid #e2e8f0;">
-                    <b>Advisory Evidence:</b> {gemini_diag}
+                <div style="font-size: 0.95rem; font-weight: 600; color: #0f172a;">
+                    {incident_matters_text}
                 </div>
             </div>
-            """,
-            unsafe_allow_html=True,
-        )
+
+            <!-- 2-COLUMN: ACTION + KEY FACTORS -->
+            <div style="display: grid; grid-template-columns: 1.2fr 1fr; gap: 16px; margin-bottom: 14px;">
+                <!-- Left: WHY THIS ACTION -->
+                <div style="background: #ffffff; border: 1px solid #e2e8f0; border-radius: 8px; padding: 14px;">
+                    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px;">
+                        <div style="font-size: 0.72rem; font-weight: 700; color: #0284c7; text-transform: uppercase; letter-spacing: 0.5px;">
+                            WHY THIS ACTION
+                        </div>
+                        <span class="pill-blue">Confidence: {conf_display}</span>
+                    </div>
+                    <div style="font-size: 1.25rem; font-weight: 700; color: #0f172a; margin-bottom: 8px;">
+                        {decision_explanation.selected_action}
+                    </div>
+                    <div style="font-size: 0.82rem; color: #475569; line-height: 1.45; margin-bottom: 10px;">
+                        {decision_explanation.selected_action_reason}
+                    </div>
+                    <div style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; padding-top: 8px; border-top: 1px solid #f1f5f9;">
+                        <div>
+                            <div style="font-size: 0.68rem; color: #64748b;">Loss Before</div>
+                            <div style="font-size: 0.88rem; font-weight: 600; color: #64748b;">₹{intelligence_decision.expected_loss_before:,.0f}</div>
+                        </div>
+                        <div>
+                            <div style="font-size: 0.68rem; color: #64748b;">Loss After</div>
+                            <div style="font-size: 0.88rem; font-weight: 600; color: #059669;">₹{intelligence_decision.expected_loss_after:,.0f}</div>
+                        </div>
+                        <div>
+                            <div style="font-size: 0.68rem; color: #64748b;">Estimated Recovery</div>
+                            <div style="font-size: 0.88rem; font-weight: 700; color: #0284c7;">₹{intelligence_decision.estimated_value:,.0f}*</div>
+                        </div>
+                    </div>
+                    <div style="font-size: 0.7rem; color: #94a3b8; margin-top: 6px;">*Simulated counterfactual projection</div>
+                </div>
+
+                <!-- Right: KEY FACTORS -->
+                <div style="background: #ffffff; border: 1px solid #e2e8f0; border-radius: 8px; padding: 14px;">
+                    <div style="font-size: 0.72rem; font-weight: 700; color: #475569; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 10px;">
+                        KEY FACTORS
+                    </div>
+                    <div style="display: flex; flex-direction: column; gap: 6px;">
+                        {key_factors_html}
+                    </div>
+                </div>
+            </div>
+
+            <!-- 2-COLUMN: ALTERNATIVES + SAFETY DECISION -->
+            <div style="display: grid; grid-template-columns: 1.2fr 1fr; gap: 16px;">
+                <!-- Left: ALTERNATIVES CONSIDERED -->
+                <div style="background: #ffffff; border: 1px solid #e2e8f0; border-radius: 8px; padding: 14px;">
+                    <div style="font-size: 0.72rem; font-weight: 700; color: #64748b; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 8px;">
+                        ALTERNATIVES CONSIDERED
+                    </div>
+                    <div style="display: flex; flex-direction: column; gap: 4px;">
+                        {alternatives_html}
+                    </div>
+                </div>
+
+                <!-- Right: 🛡 SAFETY DECISION -->
+                <div style="background: {safety_bg}; border: 1px solid {safety_border}; border-radius: 8px; padding: 14px;">
+                    <div style="font-size: 0.72rem; font-weight: 700; color: {safety_header_color}; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 8px; display: flex; align-items: center; gap: 6px;">
+                        🛡 SAFETY DECISION
+                    </div>
+                    <div style="font-size: 1.05rem; font-weight: 800; color: {safety_title_color}; margin-bottom: 4px;">
+                        {safety_badge_text}
+                    </div>
+                    <div style="font-size: 0.82rem; font-weight: 600; color: #334155; margin-bottom: 6px;">
+                        Human review: {safety_review_text}
+                    </div>
+                    <div style="font-size: 0.76rem; color: #475569; line-height: 1.4;">
+                        {safety.reason}
+                    </div>
+                </div>
+            </div>
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
 
     if recovery:
         st.markdown("**Route Performance Comparison**")
@@ -2851,8 +3039,13 @@ recovery action is permitted.
     )
 
     try:
-        history_loader = PersistentLearningHistory()
+        history_loader = st.session_state.get("learning_history") or PersistentLearningHistory()
         learned_routes = history_loader.load()
+        evidence_route_count = len(learned_routes) if learned_routes else 0
+
+        st.info(
+            f"Verified recovery evidence used in current route ranking: {evidence_route_count} routes"
+        )
 
         if learned_routes:
             l1, l2, l3, l4 = st.columns(4)

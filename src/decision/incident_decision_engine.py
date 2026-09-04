@@ -1,4 +1,5 @@
 from dataclasses import dataclass
+from typing import Any, List, Optional
 
 from src.decision.interventions import InterventionLibrary
 from src.decision.optimizer import InterventionOptimizer
@@ -6,6 +7,7 @@ from src.intelligence.incident_revenue import IncidentRevenueCalculator
 from src.intelligence.route_scoring import rank_routes
 from src.models.domain import Decision, LossEstimate
 from src.safety.controller import SafetyController
+from src.tracking.learning_history import PersistentLearningHistory
 
 
 @dataclass
@@ -51,11 +53,15 @@ class IncidentDecisionEngine:
         Final Decision
     """
 
-    def __init__(self):
+    def __init__(
+        self,
+        learning_history: Optional[Any] = None,
+    ):
         self.intervention_library = InterventionLibrary()
         self.optimizer = InterventionOptimizer()
         self.safety_controller = SafetyController()
         self.revenue_calculator = IncidentRevenueCalculator()
+        self.learning_history = learning_history
 
     def evaluate(
         self,
@@ -68,6 +74,7 @@ class IncidentDecisionEngine:
         average_transaction_value: float,
         route_candidates: list,
         revenue_impact=None,
+        learning_history: Optional[Any] = None,
     ) -> IncidentDecisionResult:
 
         if transactions_affected <= 0:
@@ -135,9 +142,29 @@ class IncidentDecisionEngine:
 
         # ---------------------------------------------------------
         # 4. Rank alternative payment routes
+        #
+        # Incorporates verified historical recovery evidence when
+        # learning history is provided (outcome-based route intelligence
+        # via Bayesian evidence updates).
         # ---------------------------------------------------------
 
-        ranked_routes = rank_routes(route_candidates)
+        active_history = (
+            learning_history
+            if learning_history is not None
+            else self.learning_history
+        )
+
+        learned_evidence = None
+        if active_history is not None:
+            if hasattr(active_history, "load") and callable(active_history.load):
+                learned_evidence = active_history.load()
+            else:
+                learned_evidence = active_history
+
+        ranked_routes = rank_routes(
+            route_candidates,
+            learning_history=learned_evidence,
+        )
 
         scored_routes = []
 
