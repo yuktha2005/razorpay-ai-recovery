@@ -88,4 +88,68 @@ def test_confidence_below_zero_is_treated_as_low_confidence():
 
     assert result.action == "MONITOR"
     assert result.allowed is True
-    
+
+
+def test_none_confidence_falls_back_to_monitor():
+    decision = make_decision(
+        action="CUSTOMER_CONFIRMATION",
+        confidence=None,
+    )
+
+    result = SafetyController().evaluate(decision)
+
+    assert result.action == "MONITOR"
+    assert result.allowed is True
+    assert result.requires_human_review is False
+
+
+def test_nan_confidence_falls_back_to_monitor():
+    decision = make_decision(
+        action="CUSTOMER_CONFIRMATION",
+        confidence=float("nan"),
+    )
+
+    result = SafetyController().evaluate(decision)
+
+    assert result.action == "MONITOR"
+    assert result.allowed is True
+    assert result.requires_human_review is False
+
+
+def test_pos_inf_confidence_falls_back_to_monitor():
+    decision = make_decision(
+        action="CUSTOMER_CONFIRMATION",
+        confidence=float("inf"),
+    )
+
+    result = SafetyController().evaluate(decision)
+
+    assert result.action == "MONITOR"
+    assert result.allowed is True
+    assert result.requires_human_review is False
+
+
+def test_neg_inf_confidence_falls_back_to_monitor():
+    decision = make_decision(
+        action="CUSTOMER_CONFIRMATION",
+        confidence=float("-inf"),
+    )
+
+    result = SafetyController().evaluate(decision)
+
+    assert result.action == "MONITOR"
+    assert result.allowed is True
+    assert result.requires_human_review is False
+
+
+def test_invalid_confidence_cannot_execute_high_impact_action():
+    for invalid_conf in [None, float("nan"), float("inf"), float("-inf")]:
+        decision = make_decision(
+            action="MANUAL_REVIEW",
+            confidence=invalid_conf,
+        )
+
+        result = SafetyController().evaluate(decision)
+
+        assert result.action == "MONITOR"
+        assert result.allowed is True

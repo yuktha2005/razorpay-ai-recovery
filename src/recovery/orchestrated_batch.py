@@ -214,31 +214,22 @@ def execute_orchestrated_batch_recovery(
         )
         recovery_healthy = False
         rollback_required = False
-    elif canary_decision in (
-        "RECOVERED",
-        "NO_RECOVERY",
-        "UNPROFITABLE",
-    ):
-        if canary_decision == "RECOVERED":
-            guardrail_decision = "CONTINUE"
-            guardrail_reason = "Recovery completed successfully."
-            recovery_healthy = True
-            rollback_required = False
-        elif canary_decision == "NO_RECOVERY":
-            guardrail_decision = "STOP"
-            guardrail_reason = "No transactions were successfully recovered."
-            recovery_healthy = False
-            rollback_required = False
-        else:
-            guardrail_decision = "STOP"
-            guardrail_reason = "Recovery was not economically viable."
-            recovery_healthy = False
-            rollback_required = True
     else:
         guardrail_decision = "NOT_APPLICABLE"
         guardrail_reason = "No recovery guardrail decision was required."
         recovery_healthy = False
         rollback_required = False
+
+    # -------------------------------------------------------------
+    # Financial outcome controls economic viability
+    # An UNPROFITABLE recovery ALWAYS requires rollback.
+    # -------------------------------------------------------------
+    if recovery_outcome.outcome_status == "UNPROFITABLE":
+        rollback_required = True
+        recovery_healthy = False
+        if guardrail_decision == "CONTINUE":
+            guardrail_decision = "STOP"
+            guardrail_reason = "Recovery was not economically viable."
 
     # -------------------------------------------------------------
     # 7. Audit the verified recovery outcome

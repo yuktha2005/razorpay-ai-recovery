@@ -22,6 +22,7 @@ class CanaryController:
     MIN_CANARY_ATTEMPTS = 5
     EXPAND_RATIO = 0.80
     ESCALATE_RATIO = 0.50
+    MIN_EXPECTED_RECOVERY_RATE = 0.05
 
     def evaluate(
         self,
@@ -49,6 +50,17 @@ class CanaryController:
                 expected_recovery_rate=expected_recovery_rate,
                 reason=(
                     "Canary sample is too small to justify expansion."
+                ),
+            )
+
+        if expected_recovery_rate <= self.MIN_EXPECTED_RECOVERY_RATE:
+            return CanaryDecision(
+                decision="STOP",
+                canary_recovery_rate=canary_rate,
+                expected_recovery_rate=expected_recovery_rate,
+                reason=(
+                    "Expected recovery rate is too low to justify "
+                    "canary expansion."
                 ),
             )
 

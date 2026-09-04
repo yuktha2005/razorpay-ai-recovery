@@ -59,3 +59,47 @@ def test_zero_attempts_stops():
     )
 
     assert result.decision == "STOP"
+
+
+def test_zero_expected_recovery_rate_stops():
+    controller = CanaryController()
+
+    result = controller.evaluate(
+        attempted_transactions=10,
+        successful_recoveries=10,
+        expected_recovery_rate=0.0,
+    )
+
+    assert result.decision == "STOP"
+    assert result.canary_recovery_rate == 1.0
+    assert result.expected_recovery_rate == 0.0
+    assert "Expected recovery rate is too low" in result.reason
+
+
+def test_near_zero_expected_recovery_rate_stops():
+    controller = CanaryController()
+
+    result = controller.evaluate(
+        attempted_transactions=10,
+        successful_recoveries=10,
+        expected_recovery_rate=0.05,
+    )
+
+    assert result.decision == "STOP"
+    assert result.canary_recovery_rate == 1.0
+    assert result.expected_recovery_rate == 0.05
+    assert "Expected recovery rate is too low" in result.reason
+
+
+def test_normal_expected_rate_allows_expand():
+    controller = CanaryController()
+
+    result = controller.evaluate(
+        attempted_transactions=10,
+        successful_recoveries=8,
+        expected_recovery_rate=0.80,
+    )
+
+    assert result.decision == "EXPAND"
+    assert result.canary_recovery_rate == 0.80
+    assert result.expected_recovery_rate == 0.80

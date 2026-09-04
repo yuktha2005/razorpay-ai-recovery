@@ -1,3 +1,5 @@
+import math
+
 from src.models.domain import Decision, SafetyDecision
 from src.safety.policy import SafetyPolicy
 
@@ -29,10 +31,19 @@ class SafetyController:
         self.policy = SafetyPolicy()
 
     def evaluate(self, decision: Decision) -> SafetyDecision:
-        confidence = max(
-            0.0,
-            min(1.0, decision.confidence),
-        )
+        raw_confidence = decision.confidence
+        if (
+            raw_confidence is None
+            or isinstance(raw_confidence, bool)
+            or not isinstance(raw_confidence, (int, float))
+            or not math.isfinite(raw_confidence)
+        ):
+            confidence = 0.0
+        else:
+            confidence = max(
+                0.0,
+                min(1.0, float(raw_confidence)),
+            )
 
         action = decision.recommended_action
 

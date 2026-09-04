@@ -1,3 +1,4 @@
+import math
 from dataclasses import dataclass
 from typing import Set
 
@@ -70,6 +71,25 @@ class SafetyPolicy:
                 reason=(
                     f"Unsupported action '{action}'. "
                     "The safety policy does not permit it."
+                ),
+            )
+
+        # -----------------------------------------------
+        # Financial input validation
+        # -----------------------------------------------
+
+        if (
+            amount_at_risk is None
+            or not isinstance(amount_at_risk, (int, float))
+            or not math.isfinite(amount_at_risk)
+            or amount_at_risk < 0
+        ):
+            return PolicyResult(
+                allowed=False,
+                requires_human_review=True,
+                reason=(
+                    "Invalid financial exposure value. "
+                    "Amount at risk must be a non-negative finite number."
                 ),
             )
 
