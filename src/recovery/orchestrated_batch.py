@@ -73,6 +73,7 @@ def execute_orchestrated_batch_recovery(
     )
 
     eligible_transactions = len(transaction_amounts)
+    eligible_amount = round(sum(transaction_amounts), 2)
 
     # -------------------------------------------------------------
     # 3. Determine simulated recovery effectiveness
@@ -319,6 +320,7 @@ def execute_orchestrated_batch_recovery(
             else 0
         ),
         "escalated_transactions": 0,
+        "eligible_amount": eligible_amount,
         "recovered_amount": float(recovery_outcome.recovered_amount),
         "attempted_amount": float(recovery_outcome.attempted_amount),
         "execution_cost": float(recovery_outcome.execution_cost),

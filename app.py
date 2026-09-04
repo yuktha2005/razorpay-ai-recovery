@@ -47,6 +47,11 @@ from src.live_reporting.report_generator import (
 from src.tracking.learning_history import (
     PersistentLearningHistory
 )
+
+from src.tracking.financial_summary import (
+    calculate_financial_summary,
+    FinancialSummary,
+)
 # =========================================
 # BACKEND IMPORTS
 # =========================================
@@ -2345,54 +2350,165 @@ recovery action is permitted.
 
     batch_result = st.session_state.get("batch_result")
 
-    if batch_result:
-        st.markdown("---")
-        st.markdown("**Recovery Metrics**")
-        m1, m2, m3, m4 = st.columns(4)
-        with m1:
-            st.metric(
-                "Eligible",
-                f"{batch_result.get('eligible_transactions', 0):,}",
-            )
-        with m2:
-            st.metric(
-                "Attempted",
-                f"{batch_result.get('attempted_transactions', 0):,}",
-            )
-        with m3:
-            st.metric(
-                "Recovered",
-                f"{batch_result.get('recovered_transactions', 0):,}",
-            )
-        with m4:
-            st.metric(
-                "Recovery Rate",
-                f"{batch_result.get('recovery_rate', 0.0) * 100:.2f}%",
-            )
+    # -------------------------------------------------------------
+    # Authoritative Financial Summary
+    # -------------------------------------------------------------
+    rev_at_risk = float(impact["revenue_at_risk"]) if impact else 0.0
+    est_recoverable = (
+        float(intelligence_decision.estimated_value)
+        if intelligence_decision
+        else 0.0
+    )
 
-        m5, m6, m7, m8 = st.columns(4)
-        with m5:
+    if transactions is not None and incident is not None:
+        inc_txns = transactions[
+            transactions["payment_method"].eq(payment_method)
+            & transactions["bank"].eq(affected_bank)
+            & transactions["device_type"].eq(device_type)
+            & transactions["status"].eq("FAILED")
+        ].head(50)
+        calc_eligible_amount = float(inc_txns["amount"].sum())
+        calc_eligible_count = len(inc_txns)
+    else:
+        calc_eligible_amount = 0.0
+        calc_eligible_count = 0
+
+    fin_summary = calculate_financial_summary(
+        revenue_at_risk=rev_at_risk,
+        eligible_amount=(
+            batch_result.get("eligible_amount", calc_eligible_amount)
+            if batch_result
+            else calc_eligible_amount
+        ),
+        batch_result=batch_result,
+    )
+
+    st.markdown("---")
+    st.markdown("### 💰 Financial Impact & Recovery Economics")
+    st.caption(
+        "Authoritative progression: Revenue at Risk → Eligible Amount → Attempted Amount → Gross Recovered → Execution Cost → NET RECOVERED → Recovery Rate → Recovery ROI"
+    )
+
+    # 1. PRE-EXECUTION: FINANCIAL IMPACT
+    st.markdown("#### 1️⃣ Pre-Execution: Quantified Financial Risk")
+    f_col1, f_col2, f_col3 = st.columns(3)
+    with f_col1:
+        st.metric(
+            "Revenue at Risk",
+            f"₹{fin_summary.revenue_at_risk:,.2f}",
+            delta=f"-{impact['excess_failures']:.0f} excess failures" if impact else None,
+            delta_color="inverse",
+            help="Business revenue at risk estimated before recovery by IncidentRevenueCalculator.",
+        )
+    with f_col2:
+        st.metric(
+            "Estimated Recoverable Value",
+            f"₹{est_recoverable:,.2f}",
+            help="Theoretical counterfactual recovery potential projected by IncidentDecisionEngine.",
+        )
+        st.caption("THEORETICAL / COUNTERFACTUAL")
+    with f_col3:
+        eligible_count = (
+            batch_result.get("eligible_transactions", calc_eligible_count)
+            if batch_result
+            else calc_eligible_count
+        )
+        st.metric(
+            "Eligible Batch Amount",
+            f"₹{fin_summary.eligible_amount:,.2f}",
+            delta=f"{eligible_count} transactions",
+            delta_color="off",
+            help="Total monetary value of failed transactions eligible for bounded recovery batch.",
+        )
+
+    # 2. POST-EXECUTION: BOUNDED RECOVERY RESULT
+    st.markdown("#### 2️⃣ Post-Execution: Bounded Recovery Result")
+    r_col1, r_col2, r_col3, r_col4 = st.columns(4)
+
+    if fin_summary.has_executed and batch_result:
+        with r_col1:
             st.metric(
-                "Simulated Recovered Value",
-                f"₹{batch_result.get('simulated_recovered_value', 0.0):,.2f}",
+                "Attempted Amount",
+                f"₹{fin_summary.attempted_amount:,.2f}",
+                delta=f"{batch_result.get('attempted_transactions', 0)} canary txns",
+                delta_color="off",
+                help="Actual monetary value of transactions attempted by BoundedRecoveryExecutor.",
             )
-            st.caption("SIMULATED / COUNTERFACTUAL")
-        with m6:
+        with r_col2:
+            st.metric(
+                "Gross Recovered",
+                f"₹{fin_summary.recovered_amount:,.2f}",
+                delta=f"+{batch_result.get('recovered_transactions', 0)} recovered",
+                help="Actual monetary value of successfully recovered transactions.",
+            )
+            st.caption("SIMULATED")
+        with r_col3:
             st.metric(
                 "Execution Cost",
-                f"₹{batch_result.get('execution_cost', 0.0):,.2f}",
+                f"₹{fin_summary.execution_cost:,.2f}",
+                delta=f"{batch_result.get('attempted_transactions', 0)} × ₹25",
+                delta_color="inverse",
+                help="Actual execution cost incurred by bounded canary simulation.",
             )
-        with m7:
+        with r_col4:
             st.metric(
-                "Net Value",
-                f"₹{batch_result.get('net_recovered_value', 0.0):,.2f}",
+                "NET RECOVERED",
+                f"₹{fin_summary.net_recovered_value:,.2f}",
+                delta=f"₹{fin_summary.net_recovered_value:,.2f} net",
+                help="Authoritative net recovered value (Gross Recovered minus Execution Cost).",
             )
-            st.caption("SIMULATED / COUNTERFACTUAL")
-        with m8:
+            st.caption("SIMULATED")
+    else:
+        with r_col1:
+            st.metric("Attempted Amount", "Not executed")
+        with r_col2:
+            st.metric("Gross Recovered", "Not executed")
+        with r_col3:
+            st.metric("Execution Cost", "Not executed")
+        with r_col4:
+            st.metric("NET RECOVERED", "Not executed")
+        st.info(
+            "ℹ️ Post-execution recovery metrics become available after executing bounded recovery simulation above."
+        )
+
+    # 3. PERFORMANCE & ROI
+    st.markdown("#### 3️⃣ Performance & Recovery ROI")
+    p_col1, p_col2, p_col3, p_col4 = st.columns(4)
+
+    if fin_summary.has_executed and batch_result:
+        with p_col1:
             st.metric(
-                "Guardrail",
+                "Recovery Rate",
+                f"{fin_summary.recovery_rate * 100:.2f}%",
+                help="Proportion of attempted recovery transactions that succeeded.",
+            )
+        with p_col2:
+            st.metric(
+                "Recovery ROI",
+                fin_summary.roi_display,
+                help="Net Recovered Value divided by Execution Cost. N/A if execution cost is zero.",
+            )
+        with p_col3:
+            st.metric(
+                "Canary Decision",
+                batch_result.get("canary_decision", "NOT_APPLICABLE"),
+                help="Bounded canary evaluation result.",
+            )
+        with p_col4:
+            st.metric(
+                "Guardrail Status",
                 batch_result.get("guardrail_decision", "NOT_RECORDED"),
+                help="Circuit breaker guardrail decision for route safety.",
             )
+    else:
+        with p_col1:
+            st.metric("Recovery Rate", "Not executed")
+        with p_col2:
+            st.metric("Recovery ROI", "ROI: N/A — no execution cost recorded")
+        with p_col3:
+            st.metric("Canary Decision", "PENDING")
+        with p_col4:
+            st.metric("Guardrail Status", "PENDING")
 
 
     # =========================================
