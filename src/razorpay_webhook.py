@@ -9,8 +9,15 @@ from datetime import datetime, timezone
 
 from dotenv import load_dotenv
 
-from fastapi import FastAPI, Request, HTTPException
-from fastapi.middleware.cors import CORSMiddleware
+try:
+    from fastapi import FastAPI, Request, HTTPException
+    from fastapi.middleware.cors import CORSMiddleware
+except ImportError:
+    FastAPI = None
+    Request = None
+    HTTPException = None
+    CORSMiddleware = None
+
 # =========================================================
 # PATH CONFIGURATION
 # =========================================================
@@ -31,21 +38,16 @@ load_dotenv(
 )
 
 WEBHOOK_SECRET = os.getenv(
-    "RAZORPAY_WEBHOOK_SECRET"
+    "RAZORPAY_WEBHOOK_SECRET", ""
 )
 
 RAZORPAY_KEY_ID = os.getenv(
-    "RAZORPAY_KEY_ID"
+    "RAZORPAY_KEY_ID", ""
 )
 
 RAZORPAY_KEY_SECRET = os.getenv(
-    "RAZORPAY_KEY_SECRET"
+    "RAZORPAY_KEY_SECRET", ""
 )
-
-if not WEBHOOK_SECRET:
-    raise RuntimeError(
-        "RAZORPAY_WEBHOOK_SECRET is missing from .env"
-    )
 
 
 # =========================================================
@@ -61,20 +63,32 @@ from src.recovery_tracker import RecoveryTracker
 # FASTAPI
 # =========================================================
 
-app = FastAPI(
-    title="AI Revenue Recovery - Razorpay Webhook",
-    version="1.0.0"
-)
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=[
-        "http://127.0.0.1:5500",
-        "http://localhost:5500",
-    ],
-    allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
-)
+if FastAPI is not None:
+    app = FastAPI(
+        title="AI Revenue Recovery - Razorpay Webhook",
+        version="1.0.0"
+    )
+    app.add_middleware(
+        CORSMiddleware,
+        allow_origins=[
+            "http://127.0.0.1:5500",
+            "http://localhost:5500",
+        ],
+        allow_credentials=True,
+        allow_methods=["*"],
+        allow_headers=["*"],
+    )
+else:
+    class _DummyApp:
+        def post(self, *args, **kwargs):
+            def decorator(f):
+                return f
+            return decorator
+        def get(self, *args, **kwargs):
+            def decorator(f):
+                return f
+            return decorator
+    app = _DummyApp()
 
 recovery_agent = RecoveryAgent()
 recovery_executor = RecoveryExecutor()

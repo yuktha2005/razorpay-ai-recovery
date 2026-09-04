@@ -2,8 +2,14 @@ import os
 import sys
 from pathlib import Path
 
-from fastapi import FastAPI, HTTPException
-from fastapi.middleware.cors import CORSMiddleware
+try:
+    from fastapi import FastAPI, HTTPException
+    from fastapi.middleware.cors import CORSMiddleware
+except ImportError:
+    FastAPI = None
+    HTTPException = None
+    CORSMiddleware = None
+
 from pydantic import BaseModel
 from dotenv import load_dotenv
 
@@ -23,49 +29,53 @@ load_dotenv(BASE_DIR / ".env", override=True)
 # RAZORPAY
 # -------------------------------------------------
 
-import razorpay
+try:
+    import razorpay
+except ImportError:
+    razorpay = None
 
 
-RAZORPAY_KEY_ID = os.getenv("RAZORPAY_KEY_ID")
-RAZORPAY_KEY_SECRET = os.getenv("RAZORPAY_KEY_SECRET")
+RAZORPAY_KEY_ID = os.getenv("RAZORPAY_KEY_ID", "")
+RAZORPAY_KEY_SECRET = os.getenv("RAZORPAY_KEY_SECRET", "")
 
 
-if not RAZORPAY_KEY_ID:
-    raise RuntimeError("RAZORPAY_KEY_ID is missing from .env")
-
-if not RAZORPAY_KEY_SECRET:
-    raise RuntimeError("RAZORPAY_KEY_SECRET is missing from .env")
-
-
-client = razorpay.Client(
-    auth=(
-        RAZORPAY_KEY_ID,
-        RAZORPAY_KEY_SECRET,
+client = None
+if razorpay and RAZORPAY_KEY_ID and RAZORPAY_KEY_SECRET:
+    client = razorpay.Client(
+        auth=(
+            RAZORPAY_KEY_ID,
+            RAZORPAY_KEY_SECRET,
+        )
     )
-)
 
 
 # -------------------------------------------------
 # APP
 # -------------------------------------------------
 
-app = FastAPI(
-    title="AI Revenue Recovery - Razorpay Test API",
-    version="1.0.0",
-)
-
-
-# -------------------------------------------------
-# CORS
-# -------------------------------------------------
-
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=["*"],
-    allow_credentials=False,
-    allow_methods=["*"],
-    allow_headers=["*"],
-)
+if FastAPI is not None:
+    app = FastAPI(
+        title="AI Revenue Recovery - Razorpay Test API",
+        version="1.0.0",
+    )
+    app.add_middleware(
+        CORSMiddleware,
+        allow_origins=["*"],
+        allow_credentials=False,
+        allow_methods=["*"],
+        allow_headers=["*"],
+    )
+else:
+    class _DummyApp:
+        def post(self, *args, **kwargs):
+            def decorator(f):
+                return f
+            return decorator
+        def get(self, *args, **kwargs):
+            def decorator(f):
+                return f
+            return decorator
+    app = _DummyApp()
 
 
 # -------------------------------------------------

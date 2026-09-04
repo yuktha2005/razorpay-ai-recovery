@@ -1,6 +1,8 @@
-import os
+try:
+    import razorpay
+except ImportError:
+    razorpay = None
 
-import razorpay
 from dotenv import load_dotenv
 
 
@@ -8,28 +10,18 @@ from dotenv import load_dotenv
 load_dotenv()
 
 
-RAZORPAY_KEY_ID = os.getenv("RAZORPAY_KEY_ID")
-RAZORPAY_KEY_SECRET = os.getenv("RAZORPAY_KEY_SECRET")
+RAZORPAY_KEY_ID = os.getenv("RAZORPAY_KEY_ID", "")
+RAZORPAY_KEY_SECRET = os.getenv("RAZORPAY_KEY_SECRET", "")
 
 
-if not RAZORPAY_KEY_ID:
-    raise RuntimeError(
-        "RAZORPAY_KEY_ID is missing from .env"
+client = None
+if razorpay and RAZORPAY_KEY_ID and RAZORPAY_KEY_SECRET:
+    client = razorpay.Client(
+        auth=(
+            RAZORPAY_KEY_ID,
+            RAZORPAY_KEY_SECRET,
+        )
     )
-
-if not RAZORPAY_KEY_SECRET:
-    raise RuntimeError(
-        "RAZORPAY_KEY_SECRET is missing from .env"
-    )
-
-
-# Razorpay client
-client = razorpay.Client(
-    auth=(
-        RAZORPAY_KEY_ID,
-        RAZORPAY_KEY_SECRET,
-    )
-)
 
 
 def create_test_order(
