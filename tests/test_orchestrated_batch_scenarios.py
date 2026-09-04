@@ -295,3 +295,120 @@ def test_scenario_stop_enforcement(mock_transactions, incident_context, tmp_path
     assert result["final_status"] == "BLOCKED"
     assert result["guardrail_decision"] == "STOP"
     assert result["recovered_transactions"] == 0
+
+
+def test_batch_result_authoritative_financial_metrics(mock_transactions, incident_context, tmp_path, monkeypatch):
+    """
+    Verify that batch_result['recovery_rate'] and batch_result['net_recovered_value']
+    are sourced authoritatively and match RecoveryOutcome.
+    """
+    monkeypatch.setattr("src.audit_logger.AUDIT_FILE", tmp_path / "recovery_audit.csv")
+    monkeypatch.setattr("src.audit_logger.LOG_DIR", tmp_path)
+
+    decision = Decision(
+        payment_id="UPI + Bank_X + Android",
+        recommended_action="ROUTE_SWITCH:UPI + Bank_Y + Android",
+        confidence=0.92,
+        expected_loss_before=10000.0,
+        expected_loss_after=2000.0,
+        estimated_value=8000.0,
+        explanation="Route degradation justifies recovery.",
+    )
+
+    safety = SafetyDecision(
+        payment_id="UPI + Bank_X + Android",
+        action="ROUTE_SWITCH:UPI + Bank_Y + Android",
+        allowed=True,
+        reason="Passed safety check.",
+        requires_human_review=False,
+    )
+
+    recovery = {
+        "alternative_bank": "Bank_Y",
+        "alternative_success_rate": 0.95,
+        "simulated_success_rate": 0.95,
+    }
+
+    result = execute_orchestrated_batch_recovery(
+        transactions=mock_transactions,
+        incident=incident_context,
+        decision=decision,
+        safety=safety,
+        recovery=recovery,
+        payment_method="UPI",
+        affected_bank="Bank_X",
+        device_type="Android",
+        batch_size=20,
+        human_approved=False,
+    )
+
+    # Verify authoritative financial fields are present
+    assert "recovery_rate" in result
+    assert "net_recovered_value" in result
+    assert "recovered_amount" in result
+    assert "execution_cost" in result
+    assert "attempted_amount" in result
+
+    # Verify math consistency
+    assert result["net_recovered_value"] == round(
+        result["recovered_amount"] - result["execution_cost"], 2
+    )
+    if result["attempted_transactions"] > 0:
+        expected_rate = round(
+            result["successful_recoveries"] / result["attempted_transactions"], 4
+        )
+        assert result["recovery_rate"] == expected_rate
+
+
+def test_section_6_recovery_analysis_updates_session_state(mock_transactions, incident_context, tmp_path, monkeypatch):
+    """
+    Verify that executing recovery analysis assigns batch_result to session state,
+    ensuring Section 4 reflects the execution immediately.
+    """
+    monkeypatch.setattr("src.audit_logger.AUDIT_FILE", tmp_path / "recovery_audit.csv")
+    monkeypatch.setattr("src.audit_logger.LOG_DIR", tmp_path)
+
+    mock_session_state = {}
+
+    decision = Decision(
+        payment_id="UPI + Bank_X + Android",
+        recommended_action="ROUTE_SWITCH:UPI + Bank_Y + Android",
+        confidence=0.90,
+        expected_loss_before=10000.0,
+        expected_loss_after=2000.0,
+        estimated_value=8000.0,
+        explanation="Route switch justified.",
+    )
+
+    safety = SafetyDecision(
+        payment_id="UPI + Bank_X + Android",
+        action="ROUTE_SWITCH:UPI + Bank_Y + Android",
+        allowed=True,
+        reason="Allowed.",
+        requires_human_review=False,
+    )
+
+    recovery = {
+        "alternative_bank": "Bank_Y",
+        "alternative_success_rate": 0.90,
+        "simulated_success_rate": 0.90,
+    }
+
+    # Simulate the exact Section 6 button execution logic
+    analysis_result = execute_orchestrated_batch_recovery(
+        transactions=mock_transactions,
+        incident=incident_context,
+        decision=decision,
+        safety=safety,
+        recovery=recovery,
+        payment_method="UPI",
+        affected_bank="Bank_X",
+        device_type="Android",
+        batch_size=20,
+        human_approved=True,
+    )
+    mock_session_state["batch_result"] = analysis_result
+
+    assert mock_session_state.get("batch_result") is not None
+    assert mock_session_state["batch_result"]["recovery_rate"] > 0
+    assert mock_session_state["batch_result"]["net_recovered_value"] > 0

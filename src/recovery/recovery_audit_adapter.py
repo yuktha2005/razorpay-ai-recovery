@@ -173,9 +173,30 @@ def record_recovery_outcome(
         "rollback_required": (
             rollback_required
         ),
+
+        # Authoritative financial outcome
+        "attempted_amount": (
+            outcome.attempted_amount
+        ),
+
+        "recovered_amount": (
+            outcome.recovered_amount
+        ),
+
+        "execution_cost": (
+            outcome.execution_cost
+        ),
+
+        "net_recovered_value": (
+            outcome.net_recovered_value
+        ),
+
+        "recovery_rate": (
+            outcome.recovery_rate
+        ),
     }
 
-    # ---------------------------------------------------------
+        # ---------------------------------------------------------
     # Write using the existing audit logger
     # ---------------------------------------------------------
 

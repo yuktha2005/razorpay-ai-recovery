@@ -1,5 +1,5 @@
 from dataclasses import dataclass
-from typing import List
+from typing import List, Optional
 
 
 @dataclass
@@ -37,6 +37,7 @@ class RecoveryOutcomeVerifier:
         successful_recoveries: int,
         failed_recoveries: int,
         execution_cost: float,
+        successful_transaction_amounts: Optional[List[float]] = None,
     ) -> RecoveryOutcome:
 
         # ---------------------------------------------------------
@@ -63,6 +64,17 @@ class RecoveryOutcomeVerifier:
                 "Execution cost cannot be negative."
             )
 
+        if successful_transaction_amounts is not None:
+            if any(amount < 0 for amount in successful_transaction_amounts):
+                raise ValueError(
+                    "Successful transaction amounts cannot be negative."
+                )
+
+            if len(successful_transaction_amounts) != successful_recoveries:
+                raise ValueError(
+                    "Length of successful transaction amounts must match successful recoveries count."
+                )
+
         attempted_transactions = (
             successful_recoveries + failed_recoveries
         )
@@ -86,13 +98,17 @@ class RecoveryOutcomeVerifier:
         # ---------------------------------------------------------
         # Calculate recovered amount.
         #
-        # Successful transactions are taken from the beginning
-        # of the attempted batch for deterministic simulation.
+        # If actual successful transaction amounts are provided,
+        # calculate recovered_amount as their sum. Otherwise, fall
+        # back to legacy simulation behavior.
         # ---------------------------------------------------------
 
-        recovered_amount = sum(
-            attempted_amounts[:successful_recoveries]
-        )
+        if successful_transaction_amounts is not None:
+            recovered_amount = sum(successful_transaction_amounts)
+        else:
+            recovered_amount = sum(
+                attempted_amounts[:successful_recoveries]
+            )
 
         # ---------------------------------------------------------
         # Financial outcome

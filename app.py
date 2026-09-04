@@ -534,13 +534,14 @@ except Exception:
     live_report = {}
 
 audit_log = load_audit_log()
-total_simulated_recovered = 0.0
+total_net_recovered = 0.0
 if audit_log is not None and not audit_log.empty:
-    total_simulated_recovered = (
-        pd.to_numeric(audit_log.get("simulated_recovered_value", 0), errors="coerce")
-        .fillna(0)
-        .sum()
-    )
+    if "net_recovered_value" in audit_log.columns:
+        valid_net = pd.to_numeric(
+            audit_log["net_recovered_value"], errors="coerce"
+        ).dropna()
+        if not valid_net.empty:
+            total_net_recovered = float(valid_net.sum())
 
 incident = detect_incident(transactions)
 impact = calculate_revenue_impact(transactions, incident) if incident is not None else None
@@ -581,9 +582,9 @@ with kpi3:
 
 with kpi4:
     st.metric(
-        "Recovered Value",
-        f"₹{total_simulated_recovered:,.0f}",
-        help="Cumulative simulated counterfactual recovery",
+        "Net Recovered Value",
+        f"₹{total_net_recovered:,.0f}",
+        help="Cumulative authoritative net recovered value across executed recovery actions (recovered value minus execution cost)",
     )
     st.caption("Simulated / Counterfactual")
 
@@ -2366,7 +2367,7 @@ recovery action is permitted.
         with m4:
             st.metric(
                 "Recovery Rate",
-                f"{batch_result.get('canary_recovery_rate', 0.0) * 100:.2f}%",
+                f"{batch_result.get('recovery_rate', 0.0) * 100:.2f}%",
             )
 
         m5, m6, m7, m8 = st.columns(4)
@@ -2855,7 +2856,7 @@ recovery action is permitted.
         ):
             with st.spinner("Executing authoritative analysis..."):
                 try:
-                    execute_orchestrated_batch_recovery(
+                    analysis_result = execute_orchestrated_batch_recovery(
                         transactions=transactions,
                         incident=incident,
                         decision=intelligence_result.decision,
@@ -2869,6 +2870,7 @@ recovery action is permitted.
                             decision_status in ("RECOVER", "ROLLBACK")
                         ),
                     )
+                    st.session_state["batch_result"] = analysis_result
                     st.success("Recovery analysis recorded to audit trail.")
                     st.rerun()
                 except Exception as ex:
@@ -2901,38 +2903,35 @@ recovery action is permitted.
                 + audit_display["device_type"].astype(str)
             )
 
-        disp_cols = [
-            c
-            for c in [
-                "timestamp",
-                "incident_time",
-                "route",
-                "recommended_bank",
-                "policy_decision",
-                "policy_approved",
-                "recovered_transactions",
-                "success_improvement_pp",
-                "estimated_recovered_value",
-            ]
-            if c in audit_display.columns
+        desired_cols = [
+            "timestamp",
+            "route",
+            "recommended_bank",
+            "policy_decision",
+            "recovered_amount",
+            "execution_cost",
+            "net_recovered_value",
+            "recovery_rate",
+            "estimated_recovered_value",
         ]
+        disp_cols = [c for c in desired_cols if c in audit_display.columns]
+
+        rename_map = {
+            "timestamp": "Run Time",
+            "route": "Route",
+            "recommended_bank": "Action",
+            "policy_decision": "Status",
+            "recovered_amount": "Recovered Amount",
+            "execution_cost": "Execution Cost",
+            "net_recovered_value": "Net Recovered Value",
+            "recovery_rate": "Recovery Rate",
+            "estimated_recovered_value": "Estimated Recovered Value",
+        }
 
         formatted_audit = (
             audit_display[disp_cols]
             .sort_values("timestamp", ascending=False)
-            .rename(
-                columns={
-                    "timestamp": "Run Time",
-                    "incident_time": "Incident",
-                    "route": "Route",
-                    "recommended_bank": "Target Bank",
-                    "policy_decision": "Decision",
-                    "policy_approved": "Approved",
-                    "recovered_transactions": "Recovered",
-                    "success_improvement_pp": "Improvement (pp)",
-                    "estimated_recovered_value": "Recovered Value",
-                }
-            )
+            .rename(columns=rename_map)
         )
         st.dataframe(
             formatted_audit.head(15), use_container_width=True, hide_index=True

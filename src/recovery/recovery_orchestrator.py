@@ -146,6 +146,9 @@ class RecoveryOrchestrator:
                 successful_recoveries=0,
                 failed_recoveries=0,
                 execution_cost=0.0,
+                successful_transaction_amounts=(
+                    execution_result.successful_transaction_amounts
+                ),
             )
 
             return RecoveryOrchestrationResult(
@@ -179,6 +182,9 @@ class RecoveryOrchestrator:
                 successful_recoveries=0,
                 failed_recoveries=0,
                 execution_cost=0.0,
+                successful_transaction_amounts=(
+                    execution_result.successful_transaction_amounts
+                ),
             )
 
             return RecoveryOrchestrationResult(
@@ -223,6 +229,9 @@ class RecoveryOrchestrator:
                 successful_recoveries=0,
                 failed_recoveries=0,
                 execution_cost=0.0,
+                successful_transaction_amounts=(
+                    execution_result.successful_transaction_amounts
+                ),
             )
 
             return RecoveryOrchestrationResult(
@@ -265,6 +274,9 @@ class RecoveryOrchestrator:
             ),
             execution_cost=(
                 execution_result.estimated_cost
+            ),
+            successful_transaction_amounts=(
+                execution_result.successful_transaction_amounts
             ),
         )
 

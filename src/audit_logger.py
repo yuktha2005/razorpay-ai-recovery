@@ -58,7 +58,13 @@ AUDIT_COLUMNS = [
     "guardrail_decision",
     "guardrail_reason",
     "recovery_healthy",
-    "rollback_required"
+    "rollback_required",
+
+    "attempted_amount",
+    "recovered_amount",
+    "execution_cost",
+    "net_recovered_value",
+    "recovery_rate"
 ]
 
 
@@ -506,6 +512,41 @@ def log_recovery_event(
 
 
     # =====================================
+    # FINANCIAL OUTCOME METRICS
+    # =====================================
+
+    attempted_amount = _get(
+        batch_result,
+        "attempted_amount",
+        ""
+    )
+
+    recovered_amount = _get(
+        batch_result,
+        "recovered_amount",
+        ""
+    )
+
+    execution_cost = _get(
+        batch_result,
+        "execution_cost",
+        ""
+    )
+
+    net_recovered_value = _get(
+        batch_result,
+        "net_recovered_value",
+        ""
+    )
+
+    recovery_rate = _get(
+        batch_result,
+        "recovery_rate",
+        ""
+    )
+
+
+    # =====================================
     # AUDIT EVENT TYPE
     # =====================================
 
@@ -631,7 +672,22 @@ def log_recovery_event(
             recovery_healthy,
 
         "rollback_required":
-            rollback_required
+            rollback_required,
+
+        "attempted_amount":
+            attempted_amount,
+
+        "recovered_amount":
+            recovered_amount,
+
+        "execution_cost":
+            execution_cost,
+
+        "net_recovered_value":
+            net_recovered_value,
+
+        "recovery_rate":
+            recovery_rate
     }
 
 

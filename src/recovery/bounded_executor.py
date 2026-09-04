@@ -1,4 +1,4 @@
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import List
 
 
@@ -23,6 +23,7 @@ class RecoveryExecutionResult:
 
     stop_reason: str
     execution_log: List[str]
+    successful_transaction_amounts: List[float] = field(default_factory=list)
 
 
 class BoundedRecoveryExecutor:
@@ -121,6 +122,7 @@ class BoundedRecoveryExecutor:
                     "Action MONITOR received.",
                     "No recovery transactions executed.",
                 ],
+                successful_transaction_amounts=[],
             )
 
         # ---------------------------------------------------------
@@ -171,6 +173,7 @@ class BoundedRecoveryExecutor:
         successful_recoveries = 0
         failed_recoveries = 0
         estimated_cost = 0.0
+        successful_transaction_amounts = []
 
         for index, amount in enumerate(
             selected_amounts,
@@ -216,6 +219,7 @@ class BoundedRecoveryExecutor:
 
             if simulated_score < success_threshold:
                 successful_recoveries += 1
+                successful_transaction_amounts.append(float(amount))
             else:
                 failed_recoveries += 1
 
@@ -310,4 +314,5 @@ class BoundedRecoveryExecutor:
             ),
             stop_reason=stop_reason,
             execution_log=execution_log,
+            successful_transaction_amounts=successful_transaction_amounts,
         )
