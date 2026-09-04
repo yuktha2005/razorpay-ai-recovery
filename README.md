@@ -232,8 +232,8 @@ d:/razorpay-ai-recovery/
 
 ### 1. Clone & Setup
 ```bash
-git clone https://github.com/yuktha2005/razorpay-ai-recovery.git
-cd razorpay-ai-recovery
+git clone https://github.com/yuktha2005/routeIQ.git
+cd routeIQ
 
 # Setup environment & install dependencies
 python -m venv venv
