@@ -573,6 +573,131 @@ html, body, [class*="css"] {
     font-weight: 700;
     font-size: 0.8rem;
 }
+
+/* =========================================================
+   MOBILE RESPONSIVE ENHANCEMENTS (< 768px)
+   ========================================================= */
+@media (max-width: 768px) {
+    .block-container {
+        padding-top: 0.75rem !important;
+        padding-bottom: 2rem !important;
+        padding-left: 0.6rem !important;
+        padding-right: 0.6rem !important;
+        max-width: 100% !important;
+    }
+
+    .header-bar {
+        flex-direction: column !important;
+        align-items: flex-start !important;
+        gap: 0.75rem !important;
+    }
+
+    .header-bar > div:last-child {
+        align-items: flex-start !important;
+        flex-direction: row !important;
+        flex-wrap: wrap !important;
+        gap: 6px !important;
+    }
+
+    .product-title {
+        font-size: 1.35rem !important;
+        line-height: 1.25 !important;
+    }
+
+    .product-subtitle {
+        font-size: 0.82rem !important;
+    }
+
+    .badge-sim, .badge-status {
+        font-size: 0.7rem !important;
+        padding: 3px 8px !important;
+    }
+
+    .section-title {
+        font-size: 1.05rem !important;
+        margin-top: 1.2rem !important;
+        margin-bottom: 0.65rem !important;
+    }
+
+    .fintech-card, .incident-card, .incident-card-critical, 
+    .decision-card, .safety-card-safe, .safety-card-review, 
+    .safety-card-stop, .ai-card, .recovery-card, .demo-card,
+    .policy-recover, .policy-escalate, .policy-stop {
+        padding: 0.9rem 0.85rem !important;
+        border-radius: 8px !important;
+        margin-bottom: 0.75rem !important;
+    }
+
+    .lifecycle-wrapper {
+        flex-direction: column !important;
+        align-items: stretch !important;
+        gap: 0.5rem !important;
+        padding: 0.85rem 0.75rem !important;
+    }
+
+    .lifecycle-arrow {
+        transform: rotate(90deg);
+        text-align: center;
+        margin: 2px 0;
+        font-size: 0.9rem !important;
+    }
+
+    .lifecycle-flow {
+        flex-direction: column !important;
+        align-items: stretch !important;
+        gap: 0.4rem !important;
+        padding: 8px !important;
+    }
+
+    .lifecycle-sep {
+        display: none !important;
+    }
+
+    .lifecycle-step {
+        justify-content: center;
+        width: 100%;
+        text-align: center;
+        font-size: 0.72rem !important;
+        padding: 6px 8px !important;
+    }
+
+    /* Table horizontal scroll wrapper for mobile */
+    div[data-testid="stTable"], div[data-testid="stDataFrame"], .stDataFrame {
+        overflow-x: auto !important;
+        -webkit-overflow-scrolling: touch !important;
+        width: 100% !important;
+    }
+
+    /* Metric cards on mobile */
+    div[data-testid="stMetricValue"] {
+        font-size: 1.3rem !important;
+    }
+
+    div[data-testid="stMetricLabel"] {
+        font-size: 0.78rem !important;
+    }
+
+    /* Buttons touch targets */
+    .stButton > button {
+        width: 100% !important;
+        min-height: 44px !important;
+        font-size: 0.88rem !important;
+        border-radius: 8px !important;
+    }
+
+    /* Tabs scrollable */
+    .stTabs [data-baseweb="tab-list"] {
+        gap: 4px !important;
+        overflow-x: auto !important;
+        -webkit-overflow-scrolling: touch !important;
+    }
+
+    .stTabs [data-baseweb="tab"] {
+        padding: 6px 10px !important;
+        font-size: 0.82rem !important;
+        white-space: nowrap !important;
+    }
+}
 </style>
 """,
     unsafe_allow_html=True,
